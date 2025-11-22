@@ -24,11 +24,11 @@ public class SecurityConfig {
     }
 
     /**
-     * Security config:
-     * - Allow all OPTIONS requests (CORS preflight) so browser preflight passes
-     * - Leave /api/auth/** public
-     * - Protect /api/admin/** for ROLE_ADMIN
-     * - Keep everything else permitAll for milestone1
+     * Minimal security config:
+     * - Allow CORS preflight
+     * - Keep /api/auth/** public
+     * - Use httpBasic() so Basic Auth headers are accepted (needed for testing with curl/Postman)
+     * - Method-level security ( @PreAuthorize ) will enforce ROLE_ADMIN on controllers
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -36,19 +36,13 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .userDetailsService(userDetailsService)
                 .authorizeHttpRequests(authorize -> authorize
-                        // Allow CORS preflight requests without authentication
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                        // auth endpoints public
                         .requestMatchers("/api/auth/**").permitAll()
-
-                        // admin endpoints require ROLE_ADMIN
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
-
-                        // other endpoints open for now
                         .anyRequest().permitAll()
                 )
-                .httpBasic(basic -> {})   // keep basic auth for quick testing
+                // Enable HTTP Basic so Authorization: Basic ... works
+                .httpBasic(basic -> {})
+                // form login not used
                 .formLogin(form -> form.disable());
 
         return http.build();
