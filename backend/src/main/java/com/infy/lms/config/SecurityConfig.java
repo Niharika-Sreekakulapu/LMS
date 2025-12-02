@@ -1,5 +1,7 @@
 package com.infy.lms.config;
 
+import com.infy.lms.repository.ApiTokenRepository;
+import com.infy.lms.security.TokenAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,15 +11,18 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.web.cors.*;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
 @Configuration
-@EnableMethodSecurity
+@EnableMethodSecurity(prePostEnabled = true)
 @RequiredArgsConstructor
 public class SecurityConfig {
 
+    private final ApiTokenRepository apiTokenRepository;
     private final UserDetailsService userDetailsService;
 
     @Bean
@@ -54,27 +59,34 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
+        // Use the UserService bean already available in context
+        TokenAuthenticationFilter tokenFilter = new TokenAuthenticationFilter(apiTokenRepository, userDetailsService);
+
+
         http
                 .userDetailsService(userDetailsService)
 
-                // CORS (new style)
+                // CORS
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
-                // CSRF disabled new lambda style
+                // CSRF disabled for local/dev; re-enable in production with proper XSRF handling
                 .csrf(csrf -> csrf.disable())
 
-                // Authorization rules
+                // Authorization rules (method-level security handles role checks like @PreAuthorize)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // allow preflight
                         .requestMatchers("/api/auth/**").permitAll()
                         .anyRequest().permitAll()
                 )
 
-                // Basic auth (new style)
+                // Basic auth (kept, but not used by your token flow)
                 .httpBasic(httpBasic -> {})
 
-                // Disable form login cleanly
-                .formLogin(form -> form.disable());
+                // Disable form login
+                .formLogin(form -> form.disable())
+
+                // Add token filter before Spring's username/password filter
+                .addFilterBefore(tokenFilter, org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

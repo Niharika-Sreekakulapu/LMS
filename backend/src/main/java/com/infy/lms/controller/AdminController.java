@@ -1,5 +1,6 @@
 package com.infy.lms.controller;
 
+import com.infy.lms.dto.AdminActionResponse;
 import com.infy.lms.dto.UserSummaryDto;
 import com.infy.lms.model.User;
 import com.infy.lms.service.AuthService;
@@ -16,48 +17,50 @@ import java.util.List;
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
 @Validated
-@PreAuthorize("hasRole('ADMIN')") // require ROLE_ADMIN for all endpoints in this controller
+@PreAuthorize("hasRole('ADMIN')")
 public class AdminController {
 
     private final AuthService authService;
 
     @PostMapping("/approve/{id}")
-    public ResponseEntity<?> approve(@PathVariable @Positive Long id) {
+    public ResponseEntity<AdminActionResponse> approve(@PathVariable @Positive Long id) {
         User u = authService.approveUser(id);
-        return ResponseEntity.ok(java.util.Map.of(
-                "message", "User approved",
-                "id", u.getId(),
-                "status", u.getStatus()
-        ));
+        AdminActionResponse resp = new AdminActionResponse(
+                "User approved",
+                u.getId(),
+                u.getStatus().name()
+        );
+        return ResponseEntity.ok(resp);
     }
 
     @PostMapping("/reject/{id}")
-    public ResponseEntity<?> reject(
+    public ResponseEntity<AdminActionResponse> reject(
             @PathVariable @Positive Long id,
-            @RequestParam(required = false) String reason) {
-
+            @RequestParam(required = false) String reason
+    ) {
         User u = authService.rejectUser(id, reason);
-        return ResponseEntity.ok(java.util.Map.of(
-                "message", "User rejected",
-                "id", u.getId(),
-                "status", u.getStatus()
-        ));
+        AdminActionResponse resp = new AdminActionResponse(
+                "User rejected",
+                u.getId(),
+                u.getStatus().name()
+        );
+        return ResponseEntity.ok(resp);
     }
 
     @GetMapping("/users")
     public ResponseEntity<List<UserSummaryDto>> listUsers(
             @RequestParam(required = false) String status
     ) {
+        List<UserSummaryDto> all = authService.listAllUsers();
+
         if (status == null || status.isBlank()) {
-            return ResponseEntity.ok(authService.listAllUsers());
+            return ResponseEntity.ok(all);
         }
 
-        // Allow filter: pending/approved/rejected
-        return ResponseEntity.ok(
-                authService.listAllUsers().stream()
-                        .filter(u -> u.getStatus().equalsIgnoreCase(status))
-                        .toList()
-        );
-    }
+        List<UserSummaryDto> filtered = all.stream()
+                .filter(u -> u.getStatus().equalsIgnoreCase(status))
+                .toList();
 
+        return ResponseEntity.ok(filtered);
+    }
 }
