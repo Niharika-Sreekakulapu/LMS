@@ -1,0 +1,61 @@
+/* normalize-visuals.css
+   Aggressive safety clamps to force consistent sizing across pages.
+   Import this AFTER all other CSS files (it uses !important).
+*/
+
+/* Force base font-size to 16px everywhere */
+html, body, #root {
+  font-size: 16px !important;
+  -webkit-text-size-adjust: 100% !important;
+  -ms-text-size-adjust: 100% !important;
+}
+
+/* Clamp h1..h4 so hero headings don't explode */
+h1 { font-size: clamp(1.6rem, 3.2vw, 2.8rem) !important; }
+h2 { font-size: clamp(1.4rem, 2.4vw, 2.2rem) !important; }
+h3 { font-size: clamp(1.2rem, 1.8vw, 1.6rem) !important; }
+h4 { font-size: clamp(1.0rem, 1.4vw, 1.2rem) !important; }
+
+/* Clamp very large numeric inline font-sizes expressed in rem/px */
+*[style*="font-size"] {
+  font-size: clamp(0.85rem, 1.6vw, 2.4rem) !important;
+}
+
+/* Limit extreme paddings/margins applied inline */
+*[style*="padding"] { padding: clamp(6px, 1.2vw, 32px) !important; }
+*[style*="margin"] { margin: clamp(0px, 0.6vw, 32px) !important; }
+
+/* Force main content width to canonical container */
+.app-container, .card, .glass-card, .dash-container, .main-content {
+  max-width: 1200px !important;
+  width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  box-sizing: border-box !important;
+}
+
+/* Reduce enormous card heights */
+.stat-card, .metric-card {
+  min-height: auto !important;
+  padding: clamp(12px, 2.4vw, 48px) !important;
+}
+
+/* Tables: readable default */
+.table, table { font-size: 0.95rem !important; }
+
+/* Buttons: consistent size */
+button, .btn-approve, .btn-reject, .cta-button {
+  font-size: 1rem !important;
+  padding: 0.6rem 0.9rem !important;
+}
+
+/* Remove overflow:hidden anywhere (so pages scroll normally) */
+html, body, #root, .page-hero {
+  overflow: visible !important;
+}
+
+/* Optional: small screens fallback */
+@media (max-width: 600px) {
+  html { font-size: 14px !important; }
+  h1 { font-size: 1.6rem !important; }
+}
