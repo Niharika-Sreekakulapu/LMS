@@ -1,6 +1,5 @@
 // src/pages/admin/SettingsPage.tsx
 import { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
 import { getSettings, updateSettings } from "../../api/adminApi";
 import type { AdminSettings } from "../../types/dto";
 import axios from "axios";
@@ -26,7 +25,7 @@ function extractMessageFromUnknown(data: unknown): string | null {
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AdminSettings>({
     defaultLoanDays: 14,
-    finePerDay: 1.0,
+    finePerDay: 10.0, // 10% of book MRP per day
     maxBooksPerUser: 3,
     membershipRules: "",
     lastUpdated: new Date().toISOString(),
@@ -35,8 +34,6 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
-  const navigate = useNavigate();
-  const location = useLocation();
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -165,16 +162,20 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <label style={{ display: "block", fontSize: 14, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
-                      Late Fee Rate ($)
+                      Late Fee Rate (% of Book MRP)
                     </label>
                     <input
                       type="number"
                       value={settings.finePerDay}
                       onChange={(e) => setSettings(s => ({ ...s, finePerDay: parseFloat(e.target.value) || 0 }))}
                       min="0"
-                      step="0.01"
+                      max="100"
+                      step="0.1"
                       style={{ width: "100%", padding: "10px 12px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 14 }}
                     />
+                    <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+                      Current: {settings.finePerDay}% of book's MRP charged per day overdue
+                    </div>
                   </div>
                   <div>
                     <label style={{ display: "block", fontSize: 14, fontWeight: 600, color: "#374151", marginBottom: 6 }}>

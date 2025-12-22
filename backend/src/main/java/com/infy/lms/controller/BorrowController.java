@@ -196,10 +196,14 @@ public class BorrowController {
     @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN')")
     @PostMapping("/borrow/{borrowRecordId}/waive")
     public ResponseEntity<Map<String, String>> waivePenaltyEndpoint(@PathVariable Long borrowRecordId) {
+        System.out.println("🔍 CONTROLLER: Waive penalty request for ID: " + borrowRecordId);
         try {
             String res = borrowService.waivePenalty(borrowRecordId);
+            System.out.println("✅ CONTROLLER: Waive penalty successful: " + res);
             return ResponseEntity.ok(Map.of("message", res));
         } catch (Exception ex) {
+            System.out.println("❌ CONTROLLER: Waive penalty failed: " + ex.getMessage());
+            ex.printStackTrace();
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
         }
     }
