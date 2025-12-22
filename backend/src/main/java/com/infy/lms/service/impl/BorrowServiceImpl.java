@@ -24,6 +24,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -590,6 +591,125 @@ public class BorrowServiceImpl implements BorrowService {
             rec.setStatus(BorrowStatus.OVERDUE);
             borrowRepo.save(rec);
         }
+    }
+
+    @Override
+    @Transactional
+    public void sendDueDateAlerts() {
+        // Calculate the date 2 days from now (start and end of that day)
+        Instant now = Instant.now();
+        Instant twoDaysFromNow = now.plus(Duration.ofDays(2));
+        Instant startOfDay = twoDaysFromNow.truncatedTo(ChronoUnit.DAYS);
+        Instant endOfDay = startOfDay.plus(Duration.ofDays(1)).minus(Duration.ofNanos(1));
+
+        System.out.println("🔍 DUE DATE ALERTS: Checking for books due between " + startOfDay + " and " + endOfDay);
+
+        // Find all active borrows (not returned) due in exactly 2 days
+        List<BorrowRecord> dueInTwoDays = borrowRepo.findAll().stream()
+                .filter(record -> record.getReturnedAt() == null) // Not yet returned
+                .filter(record -> {
+                    Instant dueDate = record.getDueDate();
+                    return dueDate != null && dueDate.isAfter(startOfDay) && dueDate.isBefore(endOfDay);
+                })
+                .collect(Collectors.toList());
+
+        System.out.println("📋 DUE DATE ALERTS: Found " + dueInTwoDays.size() + " books due in 2 days");
+
+        // Send email alerts to each student
+        for (BorrowRecord record : dueInTwoDays) {
+            try {
+                User student = record.getStudent();
+                Book book = record.getBook();
+
+                if (student != null && student.getEmail() != null && book != null) {
+                    String studentName = student.getName() != null ? student.getName() : "Valued Student";
+                    String bookTitle = book.getTitle() != null ? book.getTitle() : "Library Book";
+                    String dueDateStr = java.time.format.DateTimeFormatter.ofPattern("MMMM dd, yyyy")
+                            .format(java.time.LocalDateTime.ofInstant(record.getDueDate(), java.time.ZoneId.systemDefault()));
+
+                    String subject = "📚 Book Due Reminder - " + bookTitle;
+                    String htmlBody = String.format(
+                        """
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="UTF-8">
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                            <title>Book Due Reminder</title>
+                            <style>
+                                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #f9f9f9; }
+                                .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+                                .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; text-align: center; }
+                                .content { padding: 30px 20px; }
+                                .book-card { background: #f8f9fa; border-left: 4px solid #667eea; padding: 15px; margin: 20px 0; border-radius: 8px; }
+                                .warning-card { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 8px; color: #856404; }
+                                .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; border-top: 1px solid #e9ecef; }
+                                h1 { margin: 0; font-size: 28px; }
+                                h2 { color: #667eea; margin-top: 0; }
+                                h3 { color: #856404; margin: 0 0 10px 0; }
+                                p { line-height: 1.6; }
+                                .highlight { color: #667eea; font-weight: 600; }
+                                .due-date { font-size: 18px; font-weight: 700; color: #dc3545; margin: 10px 0; }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="container">
+                                <div class="header">
+                                    <h1>📚 Due Date Reminder</h1>
+                                    <p>Please return your book on time</p>
+                                </div>
+
+                                <div class="content">
+                                    <p>Hello <span class="highlight">%s</span>,</p>
+
+                                    <p>This is a friendly reminder that one of your borrowed books is due for return in <strong>2 days</strong>.</p>
+
+                                    <div class="book-card">
+                                        <h2>📖 Book Details</h2>
+                                        <p><strong>Book Title:</strong> %s</p>
+                                        <p><strong>Author:</strong> %s</p>
+                                        <p><strong>Due Date:</strong></p>
+                                        <div class="due-date">%s</div>
+                                    </div>
+
+                                    <div class="warning-card">
+                                        <h2>⚠️ Important Notice</h2>
+                                        <p>Please return this book by the due date to avoid late fees. Late fees are calculated at 10%% of the book's MRP per day overdue.</p>
+                                        <p>If you need more time, please contact the library staff to extend your loan period.</p>
+                                    </div>
+
+                                    <p>You can return the book through your student dashboard or by visiting the library in person.</p>
+
+                                    <p>Thank you for using our library services!</p>
+
+                                    <p>Best regards,<br>
+                                    <strong>Library Management System</strong></p>
+                                </div>
+
+                                <div class="footer">
+                                    <p><strong>Library Management System</strong></p>
+                                    <p>This is an automated reminder • Do not reply to this email</p>
+                                    <p>© 2025 Library Management System. All rights reserved.</p>
+                                </div>
+                            </div>
+                        </body>
+                        </html>
+                        """,
+                        studentName,
+                        bookTitle,
+                        book.getAuthor() != null ? book.getAuthor() : "Unknown Author",
+                        dueDateStr
+                    ).trim();
+
+                    emailService.sendEmail(student.getEmail(), subject, htmlBody);
+                    System.out.println("✅ DUE DATE ALERT: Sent reminder to " + student.getEmail() + " for book '" + bookTitle + "' due on " + dueDateStr);
+                }
+            } catch (Exception ex) {
+                System.out.println("❌ DUE DATE ALERT: Failed to send alert for borrow record " + record.getId() + ": " + ex.getMessage());
+            }
+        }
+
+        System.out.println("✅ DUE DATE ALERTS: Completed sending " + dueInTwoDays.size() + " reminders");
     }
 
     // -----------------------
