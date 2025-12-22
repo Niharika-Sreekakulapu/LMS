@@ -57,6 +57,7 @@ public class AdminInitializer implements CommandLineRunner {
                     .status(UserStatus.APPROVED)
                     .enabled(true)
                     .firstLogin(false)
+                    .emailNotifications(false)
                     .build();
 
             userRepository.save(adminUser);

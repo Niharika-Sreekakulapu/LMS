@@ -91,6 +91,9 @@ public class BorrowServiceImpl implements BorrowService {
                 .penaltyAmount(BigDecimal.ZERO)
                 .penaltyType(BorrowRecord.PenaltyType.NONE)
                 .penaltyStatus(BorrowRecord.PenaltyStatus.NONE)
+                // Ensure boolean flags are explicitly set so DB INSERT includes columns (avoids schema default issues)
+                .studentReportedDamaged(false)
+                .studentReportedLost(false)
                 .build();
 
         borrowRepo.save(record);
@@ -129,10 +132,8 @@ public class BorrowServiceImpl implements BorrowService {
                 ? Instant.now()
                 : request.getReturnDate().atStartOfDay(ZoneOffset.UTC).toInstant();
 
-        boolean reportedDamaged = false;
-        boolean reportedLost = false;
-        try { reportedDamaged = request.isDamaged(); } catch (Throwable ignored) {}
-        try { reportedLost = request.isLost(); } catch (Throwable ignored) {}
+        boolean reportedDamaged = request.isDamaged();
+        boolean reportedLost = request.isLost();
 
         Book book = bookRepo.findById(record.getBook().getId())
                 .orElseThrow(() -> new BorrowException("Book not found for penalty calculation"));
@@ -178,11 +179,15 @@ public class BorrowServiceImpl implements BorrowService {
             }
         }
 
-        // LATE calculation - 10% of MRP per day overdue
+        // Calculate days late
+        long daysLate = 0;
         if (returnedAt.isAfter(record.getDueDate())) {
-            long daysLate = Duration.between(record.getDueDate(), returnedAt).toDays();
+            daysLate = Duration.between(record.getDueDate(), returnedAt).toDays();
             if (daysLate < 0) daysLate = 0;
+        }
 
+        // LATE calculation - 10% of MRP per day overdue
+        if (daysLate > 0) {
             // Calculate 10% of MRP per day for each day overdue
             System.out.println("🔍 LATE PENALTY: Book MRP = " + book.getMrp() + ", Days Late = " + daysLate + ", Book Title = '" + book.getTitle() + "'");
 
@@ -195,25 +200,32 @@ public class BorrowServiceImpl implements BorrowService {
 
             // Determine primary penalty type (prioritize damage/lost over late)
             if (!hasDamageOrLossPenalty) {
-                primaryPenaltyType = daysLate > 0 ? BorrowRecord.PenaltyType.LATE : BorrowRecord.PenaltyType.NONE;
+                primaryPenaltyType = BorrowRecord.PenaltyType.LATE;
             }
-
-            record.setReturnedAt(returnedAt);
-            record.setStatus(daysLate > 0 ? BorrowStatus.LATE_RETURNED : BorrowStatus.RETURNED);
 
             System.out.println("💰 LATE RESULT: Type=" + primaryPenaltyType + ", Amount=₹" + totalPenalty + ", Status=PENDING");
         } else {
             System.out.println("✅ ON TIME RETURN: No late penalty for book '" + book.getTitle() + "'");
-
-            record.setReturnedAt(returnedAt);
-            // Always set status to RETURNED - use penaltyType to distinguish loss/damage
-            record.setStatus(BorrowStatus.RETURNED);
         }
+
+        // Set return details
+        record.setReturnedAt(returnedAt);
 
         // Set final penalty values
         record.setPenaltyAmount(totalPenalty);
         record.setPenaltyType(primaryPenaltyType);
         record.setPenaltyStatus(totalPenalty.compareTo(BigDecimal.ZERO) > 0 ? BorrowRecord.PenaltyStatus.PENDING : BorrowRecord.PenaltyStatus.NONE);
+
+        // Set status based on return condition and penalties (priority: lost > damaged > late > on-time)
+        if (reportedLost) {
+            record.setStatus(BorrowStatus.LOST);
+        } else if (reportedDamaged) {
+            record.setStatus(BorrowStatus.DAMAGED);
+        } else if (daysLate > 0) {
+            record.setStatus(BorrowStatus.LATE_RETURNED);
+        } else {
+            record.setStatus(BorrowStatus.RETURNED);
+        }
 
         borrowRepo.save(record);
 
@@ -418,11 +430,28 @@ public class BorrowServiceImpl implements BorrowService {
     @Override
     @Transactional(readOnly = true)
     public List<com.infy.lms.dto.PenaltyDTO> getAllPendingPenalties() {
-        return borrowRepo.findAll().stream()
-                .filter(r -> r.getPenaltyAmount() != null && r.getPenaltyAmount().compareTo(java.math.BigDecimal.ZERO) > 0
-                        && r.getPenaltyStatus() == BorrowRecord.PenaltyStatus.PENDING)
+        List<BorrowRecord> allRecords = borrowRepo.findAll();
+        System.out.println("🔍 getAllPendingPenalties: Found " + allRecords.size() + " total borrow records");
+
+        List<com.infy.lms.dto.PenaltyDTO> pendingPenalties = allRecords.stream()
+                .filter(r -> {
+                    boolean hasPenalty = r.getPenaltyAmount() != null && r.getPenaltyAmount().compareTo(java.math.BigDecimal.ZERO) > 0;
+                    boolean isPending = r.getPenaltyStatus() == BorrowRecord.PenaltyStatus.PENDING;
+                    if (hasPenalty && isPending) {
+                        System.out.println("📋 Found pending penalty: BorrowRecord ID=" + r.getId() +
+                                         ", Student=" + (r.getStudent() != null ? r.getStudent().getName() : "Unknown") +
+                                         ", Book=" + (r.getBook() != null ? r.getBook().getTitle() : "Unknown") +
+                                         ", Amount=" + r.getPenaltyAmount() +
+                                         ", Status=" + r.getPenaltyStatus() +
+                                         ", Returned=" + (r.getReturnedAt() != null));
+                    }
+                    return hasPenalty && isPending;
+                })
                 .map(this::toPenaltyDto)
                 .collect(Collectors.toList());
+
+        System.out.println("✅ getAllPendingPenalties: Returning " + pendingPenalties.size() + " pending penalties");
+        return pendingPenalties;
     }
 
     @Override

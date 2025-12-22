@@ -49,14 +49,38 @@ public class BorrowController {
     // 2) Return a book
     @PreAuthorize("hasAnyRole('STUDENT','LIBRARIAN','ADMIN')")
     @PostMapping("/return")
-    public ResponseEntity<?> returnBook(@RequestBody ReturnRequestDTO req) {
-        if (req.getBorrowRecordId() == null) {
-            return ResponseEntity.badRequest().body(Map.of("message", "borrowRecordId required"));
-        }
+    public ResponseEntity<?> returnBook(@RequestBody Map<String, Object> requestMap) {
+        System.out.println("🔍 CONTROLLER: Return request received");
+        System.out.println("   Raw request: " + requestMap);
+
         try {
+            ReturnRequestDTO req = new ReturnRequestDTO();
+
+            // Manually map the fields
+            if (requestMap.containsKey("borrowRecordId")) {
+                req.setBorrowRecordId(Long.valueOf(requestMap.get("borrowRecordId").toString()));
+            }
+            if (requestMap.containsKey("damaged")) {
+                req.setDamaged(Boolean.parseBoolean(requestMap.get("damaged").toString()));
+            }
+            if (requestMap.containsKey("lost")) {
+                req.setLost(Boolean.parseBoolean(requestMap.get("lost").toString()));
+            }
+
+            System.out.println("   Mapped DTO:");
+            System.out.println("   borrowRecordId: " + req.getBorrowRecordId());
+            System.out.println("   damaged: " + req.isDamaged());
+            System.out.println("   lost: " + req.isLost());
+
+            if (req.getBorrowRecordId() == null) {
+                return ResponseEntity.badRequest().body(Map.of("message", "borrowRecordId required"));
+            }
+
             String res = borrowService.returnBook(req);
             return ResponseEntity.ok(Map.of("message", res));
         } catch (Exception ex) {
+            System.out.println("❌ CONTROLLER: Exception in returnBook: " + ex.getMessage());
+            ex.printStackTrace();
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
         }
     }
@@ -166,6 +190,42 @@ public class BorrowController {
                                                                   @RequestBody com.infy.lms.dto.PaymentRequestDTO payment) {
         String res = borrowService.payPenalty(borrowRecordId, payment.getAmount());
         return ResponseEntity.ok(Map.of("message", res));
+    }
+
+    // Waive a penalty (admin/librarian only)
+    @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN')")
+    @PostMapping("/borrow/{borrowRecordId}/waive")
+    public ResponseEntity<Map<String, String>> waivePenaltyEndpoint(@PathVariable Long borrowRecordId) {
+        try {
+            String res = borrowService.waivePenalty(borrowRecordId);
+            return ResponseEntity.ok(Map.of("message", res));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    // Mark penalty as paid (admin/librarian only)
+    @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN')")
+    @PostMapping("/borrow/{borrowRecordId}/mark-paid")
+    public ResponseEntity<Map<String, String>> markPenaltyAsPaidEndpoint(@PathVariable Long borrowRecordId) {
+        try {
+            BorrowRecord record = borrowRepo.findById(borrowRecordId)
+                    .orElseThrow(() -> new BorrowException("Borrow record not found"));
+
+            BigDecimal owed = record.getPenaltyAmount() == null ? BigDecimal.ZERO : record.getPenaltyAmount();
+
+            if (owed.compareTo(BigDecimal.ZERO) == 0) {
+                return ResponseEntity.badRequest().body(Map.of("message", "No penalty outstanding for this borrow record."));
+            }
+
+            // Mark as paid - keep original penalty amount for display
+            record.setPenaltyStatus(BorrowRecord.PenaltyStatus.PAID);
+            borrowRepo.save(record);
+
+            return ResponseEntity.ok(Map.of("message", "Penalty marked as paid successfully. Amount: " + owed.toPlainString()));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
+        }
     }
 
 }

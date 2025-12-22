@@ -128,6 +128,8 @@ export const rejectMembershipRequest = (id: number, reason?: string) =>
 export const getMemberPenalties = (memberId: number) => client.get(`/api/members/${memberId}/penalties`);
 export const getAllPendingPenalties = () => client.get("/api/penalties/pending");
 export const payPenalty = (borrowRecordId: number, amount: number) => client.post(`/api/borrow/${borrowRecordId}/pay`, { amount });
+export const waivePenalty = (borrowRecordId: number) => client.post(`/api/borrow/${borrowRecordId}/waive`);
+export const markPenaltyAsPaid = (borrowRecordId: number) => client.post(`/api/borrow/${borrowRecordId}/mark-paid`);
 export const computePenalty = (borrowRecordId: number) => client.post(`/api/borrow/${borrowRecordId}/penalty/compute`);
 export const reconcilePenalties = () => client.post("/api/borrow/reconcile");
 

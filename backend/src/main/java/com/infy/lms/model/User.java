@@ -41,10 +41,12 @@ public class User {
     @Column(nullable = false)
     private String password; // already BCrypted
 
+    @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private UserStatus status = UserStatus.PENDING;
 
+    @Builder.Default
     @Column(name = "first_login", nullable = false)
     private Boolean firstLogin = true;
 
@@ -58,6 +60,7 @@ public class User {
     private Instant updatedAt;
 
     // ✅ Add this field for email verification
+    @Builder.Default
     @Column(nullable = false)
     private boolean enabled = false;
 
@@ -95,6 +98,7 @@ public class User {
         public int getPrice() { return price; }
     }
 
+    @Builder.Default
     @Column(name = "membership_type", nullable = false)
     @Enumerated(EnumType.STRING)
     private MembershipType membershipType = MembershipType.NORMAL;
@@ -126,7 +130,7 @@ public class User {
     @Column(length = 100)
     private String course;
 
-    @Column(name = "year", length = 20)
+    @Column(name = "year_of_study", length = 20)
     private String year;
 
     @Column(name = "student_id", length = 50)
@@ -141,27 +145,33 @@ public class User {
     @Column(name = "monthly_reading_goal")
     private Integer monthlyReadingGoal;
 
+    @Builder.Default
     @Column(name = "email_notifications", nullable = false)
     private Boolean emailNotifications = false;
 
+    @Builder.Default
     @Column(name = "points_balance", nullable = false)
     private Integer pointsBalance = 0;
 
     @Column(length = 500)
     private String badges; // comma-separated or JSON
 
+    @Builder.Default
     @Column(name = "reading_streak", nullable = false)
     private Integer readingStreak = 0;
 
     @Column(name = "favorite_genres", length = 500)
     private String favoriteGenres; // comma-separated or JSON
 
+    @Builder.Default
     @Column(name = "total_read_time", nullable = false)
     private Integer totalReadTime = 0;
 
+    @Builder.Default
     @Column(name = "favorite_books_count", nullable = false)
     private Integer favoriteBooksCount = 0;
 
+    @Builder.Default
     @Column(name = "reviews_given", nullable = false)
     private Integer reviewsGiven = 0;
 

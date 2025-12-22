@@ -31,28 +31,31 @@ public class EmailServiceImpl implements EmailService {
 
     @Override
     public void sendEmail(String to, String subject, String htmlBody) {
-        try {
-            logger.info("Sending email to: {}, subject: {}", to, subject);
+        // Send emails asynchronously to avoid blocking request threads or transactions
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            try {
+                logger.info("Sending email to: {}, subject: {}", to, subject);
 
-            MimeMessage msg = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(msg, false, "UTF-8");
+                MimeMessage msg = mailSender.createMimeMessage();
+                MimeMessageHelper helper = new MimeMessageHelper(msg, false, "UTF-8");
 
-            if (fromAddress != null && !fromAddress.isBlank()) {
-                helper.setFrom(fromAddress, fromName == null ? null : fromName);
+                if (fromAddress != null && !fromAddress.isBlank()) {
+                    helper.setFrom(fromAddress, fromName == null ? null : fromName);
+                }
+
+                helper.setTo(to);
+                helper.setSubject(subject);
+                helper.setText(htmlBody, true); // HTML enabled
+
+                mailSender.send(msg);
+
+                logger.info("Email sent successfully to: {}", to);
+
+            } catch (Exception e) {
+                logger.error("Failed to send email to: {}, subject: {}", to, subject, e);
+                // do not rethrow - logging only so email failures don't affect workflow
             }
-
-            helper.setTo(to);
-            helper.setSubject(subject);
-            helper.setText(htmlBody, true); // HTML enabled
-
-            mailSender.send(msg);
-
-            logger.info("Email sent successfully to: {}", to);
-
-        } catch (Exception e) {
-            logger.error("Failed to send email to: {}, subject: {}", to, subject, e);
-            e.printStackTrace(); // logging only, does not break flow
-        }
+        });
     }
 
     @Override
