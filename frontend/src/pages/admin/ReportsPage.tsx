@@ -35,7 +35,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Reports Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20 }}>
         <div style={{ background: "white", padding: 24, borderRadius: 12, boxShadow: "0 6px 18px rgba(2,6,23,0.06)" }}>
           <div style={{ marginBottom: 16 }}>
             <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>📊 Library Usage Report</h3>

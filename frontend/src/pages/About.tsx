@@ -203,35 +203,68 @@ export default function About() {
                   fontSize: "1.1rem"
                 }}
               >
-                Join hundreds of institutions worldwide. 
+                Join hundreds of institutions worldwide.
                 Experience the future of library management today.
               </p>
-              
-              <Link
-                to="/register"
-                style={{
-                    display: "inline-block",
-                    background: "#3A2618",
-                    color: "white",
+
+              <div style={{ display: "flex", gap: "15px", justifyContent: "center", marginBottom: "20px" }}>
+                <button
+                  onClick={() => window.location.href = "/"}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "transparent",
+                    color: "#3A2618",
+                    border: "2px solid #3A2618",
                     textDecoration: "none",
-                    padding: "16px 40px",
-                    borderRadius: "50px",
-                    fontSize: "1rem",
+                    padding: "12px 24px",
+                    borderRadius: "25px",
+                    fontSize: "0.95rem",
                     fontWeight: 600,
-                    boxShadow: "0 10px 20px rgba(58, 38, 24, 0.2)",
-                    transition: "transform 0.2s, background 0.2s"
-                }}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateY(-3px)";
-                    e.currentTarget.style.backgroundColor = "#2C1810";
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
+                    cursor: "pointer",
+                    transition: "all 0.2s"
+                  }}
+                  onMouseEnter={(e) => {
                     e.currentTarget.style.backgroundColor = "#3A2618";
-                }}
-              >
-                Get Started
-              </Link>
+                    e.currentTarget.style.color = "white";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                    e.currentTarget.style.color = "#3A2618";
+                  }}
+                >
+                  🏠 Home
+                </button>
+
+                <Link
+                  to="/register"
+                  style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      background: "#3A2618",
+                      color: "white",
+                      textDecoration: "none",
+                      padding: "12px 24px",
+                      borderRadius: "25px",
+                      fontSize: "0.95rem",
+                      fontWeight: 600,
+                      boxShadow: "0 10px 20px rgba(58, 38, 24, 0.2)",
+                      transition: "transform 0.2s, background 0.2s"
+                  }}
+                  onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = "translateY(-3px)";
+                      e.currentTarget.style.backgroundColor = "#2C1810";
+                  }}
+                  onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "translateY(0)";
+                      e.currentTarget.style.backgroundColor = "#3A2618";
+                  }}
+                >
+                  🚀 Get Started
+                </Link>
+              </div>
             </div>
             
           </div>

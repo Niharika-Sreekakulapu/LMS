@@ -25,4 +25,6 @@ public class BookDTO {
     private Instant createdAt;
     private Instant updatedAt;
     private String accessLevel;
+    // Optional explanation why this book was recommended
+    private String recommendationReason;
 }

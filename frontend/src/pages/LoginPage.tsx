@@ -5,7 +5,7 @@ import { setBasicAuthFromToken, clearAuth, saveAuth } from "../api/axiosClient";
 import axios from "axios";
 import { login as loginApi } from "../api/authApi";
 import { useAuth } from "../hooks/useAuth";
-import libImage from "../assets/lib.webp";
+import loginImage from "../assets/login.jpg";
 
 type Role = "librarian" | "student" | "admin";
 
@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>("student"); // required for login validation
   const [err, setErr] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const nav = useNavigate();
   const { login } = useAuth();
 
@@ -120,8 +121,7 @@ export default function LoginPage() {
         /* LEFT SIDE: IMAGE */
         .lp-image-section {
           flex: 1;
-          /* Updated image to match the library chair/shelves vibe if possible, or keep existing */
-          background-image: url(${libImage});
+          background-image: url(${loginImage});
           background-size: cover;
           background-position: center;
           position: relative;
@@ -173,7 +173,7 @@ export default function LoginPage() {
 
         .lp-input, .lp-select {
           width: 100%;
-          padding: 12px 15px;
+          padding: 12px 15px !important;
           background-color: #F5F2EB; /* Cream input bg */
           border: 1px solid #D7CCC8;
           border-radius: 12px;
@@ -187,6 +187,48 @@ export default function LoginPage() {
           border-color: #D7CCC8; /* Tan focus */
           box-shadow: 0 0 0 3px rgba(215, 204, 200, 0.1);
         }
+
+        /* --- FIXED PASSWORD ICON STYLES --- */
+        .password-wrapper {
+          position: relative;
+          width: 100%; /* Fixes the centering issue */
+        }
+
+        /* Ensure input inside wrapper has enough right padding to avoid overlap */
+        .password-wrapper .lp-input {
+          padding-right: 48px !important;
+        }
+
+        .password-toggle-btn {
+          position: absolute;
+          right: 8px;
+          top: 30%;
+          bottom: 40%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          cursor: pointer;
+          font-size: 1rem;
+          color: #666;
+          padding: 2px;
+          display: flex;
+          align-items: center;
+          justify-content: right;
+          width: 28px;
+          height: 28px;
+          border-radius: 4px;
+          transition: color 0.2s;
+        }
+
+        .password-toggle-btn:hover {
+          color: #4A3328;
+        }
+        
+        /* Hide default browser eye icon (Edge/IE) */
+        .lp-input::-ms-reveal {
+          display: none;
+        }
+        /* ---------------------------------- */
 
         /* BUTTONS */
         .lp-submit-btn {
@@ -205,7 +247,8 @@ export default function LoginPage() {
         }
 
         .lp-submit-btn:hover {
-          background-color: #B8A99A;
+          background-color: #B8A99A; 
+          color: #3E2723;
         }
 
         .lp-home-btn {
@@ -302,16 +345,26 @@ export default function LoginPage() {
                 </select>
               </div>
 
-              {/* Password */}
+              {/* Password - UPDATED WITH FIX */}
               <div className="lp-input-group">
                 <label className="lp-label">Password</label>
-                <input
-                  className="lp-input"
-                  name="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+                <div className="password-wrapper">
+                  <input
+                    className="lp-input"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    style={{ paddingRight: '40px' }}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    <i className={showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'}></i>
+                  </button>
+                </div>
               </div>
 
               {/* Submit Button */}

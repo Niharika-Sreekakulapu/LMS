@@ -246,6 +246,7 @@ const Requests: React.FC = () => {
 
   // Action handlers
   const handleApproveRequest = async (request: IssueRequest) => {
+    console.log('handleApproveRequest clicked for request', request?.id);
     setSelectedRequest(request);
     setDueDateOverride(computeExpectedDueDate(request));
 
@@ -256,6 +257,7 @@ const Requests: React.FC = () => {
     } catch (error) {
       console.error('Error fetching book details:', error);
       setSelectedBook(null); // Fallback to null
+      showToast('error', 'Failed to load book details');
     }
 
     setShowApproveModal(true);
@@ -270,20 +272,30 @@ const Requests: React.FC = () => {
   const processApprove = async () => {
     if (!selectedRequest) return;
 
+    console.log('processApprove started for request', selectedRequest.id, 'dueDateOverride=', dueDateOverride);
     setProcessingRequests(prev => new Set(prev).add(selectedRequest.id));
 
     try {
-      await approveIssueRequest(selectedRequest.id, {
+      const resp = await approveIssueRequest(selectedRequest.id, {
         expectedDueDate: dueDateOverride || computeExpectedDueDate(selectedRequest)
       });
 
+      console.log('approveIssueRequest response:', resp);
       showToast('success', `Request #${selectedRequest.id} approved successfully!`);
       setShowApproveModal(false);
       setSelectedRequest(null);
       loadRequests();
     } catch (error: any) {
-      if (error.response?.data?.message?.includes('OutOfStock')) {
+      console.error('processApprove error:', error);
+
+      const serverMessage = error?.response?.data?.message || error?.response?.data?.error || null;
+      if (serverMessage && serverMessage.includes('OutOfStock')) {
         showToast('error', 'Cannot approve: Book out of stock');
+      } else if (serverMessage) {
+        // show backend message if present to help debugging
+        showToast('error', `Failed to approve: ${serverMessage}`);
+      } else if (error?.message) {
+        showToast('error', `Failed to approve: ${error.message}`);
       } else {
         showToast('error', 'Failed to approve request');
       }
@@ -1150,19 +1162,28 @@ const Requests: React.FC = () => {
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          zIndex: 1000
+          zIndex: 1000,
+          padding: '20px'
         }}>
           <div style={{
             background: 'white',
             borderRadius: '12px',
-            padding: '30px',
+            padding: '20px',
             maxWidth: '600px',
             width: '90%',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
+            maxHeight: '80vh',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+            display: 'flex',
+            flexDirection: 'column'
           }}>
-            <h3 style={{ textAlign: 'center', marginBottom: '20px' }}>⚡ Bulk Approve Issue Requests</h3>
+            <h3 style={{ textAlign: 'center', marginBottom: '20px', flexShrink: 0 }}>⚡ Bulk Approve Issue Requests</h3>
 
-            <div style={{ marginBottom: '20px' }}>
+            <div style={{
+              overflowY: 'auto',
+              flex: 1,
+              marginBottom: '20px',
+              minHeight: 0
+            }}>
               <div style={{ textAlign: 'center', marginBottom: '15px' }}>
                 <div style={{ fontSize: '3rem', marginBottom: '10px' }}>📚</div>
                 <h4 style={{ color: '#2A1F16' }}>Confirm Bulk Approval</h4>

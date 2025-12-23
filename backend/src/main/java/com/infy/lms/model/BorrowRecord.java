@@ -46,7 +46,7 @@ public class BorrowRecord {
 
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 20)
     private BorrowStatus status;
 
 
@@ -55,8 +55,14 @@ public class BorrowRecord {
     private PenaltyType penaltyType = PenaltyType.NONE;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "penalty_status", nullable = false)
+    @Column(name = "penalty_status", nullable = false, length = 10)
     private PenaltyStatus penaltyStatus = PenaltyStatus.NONE;
+
+    @Column(name = "student_reported_damaged")
+    private boolean studentReportedDamaged = false;
+
+    @Column(name = "student_reported_lost")
+    private boolean studentReportedLost = false;
 
     @PrePersist
     protected void onCreate() {

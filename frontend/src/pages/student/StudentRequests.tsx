@@ -52,8 +52,9 @@ const StudentRequests: React.FC = () => {
   const [issueRequests, setIssueRequests] = useState<IssueRequest[]>([]);
   const [acquisitionRequests, setAcquisitionRequests] = useState<AcquisitionRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [showForm, setShowForm] = useState(false);
+const [statusFilter, setStatusFilter] = useState<string>('ALL');
+const [searchTerm, setSearchTerm] = useState<string>('');
+const [showForm, setShowForm] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -271,8 +272,17 @@ const StudentRequests: React.FC = () => {
   // Get current requests based on active tab
   const currentRequests = activeTab === 'issue' ? issueRequests : acquisitionRequests;
   const filteredRequests = currentRequests.filter(request => {
-    if (statusFilter === 'ALL') return true;
-    return request.status === statusFilter;
+    const matchesStatus = statusFilter === 'ALL' || request.status === statusFilter;
+    let matchesSearch = true;
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase().trim();
+      if (activeTab === 'issue') {
+        matchesSearch = (request as IssueRequest).bookTitle?.toLowerCase().includes(searchLower) ?? false;
+      } else {
+        matchesSearch = (request as AcquisitionRequest).bookName?.toLowerCase().includes(searchLower) ?? false;
+      }
+    }
+    return matchesStatus && matchesSearch;
   });
 
   // Pagination calculations
@@ -284,7 +294,7 @@ const StudentRequests: React.FC = () => {
   // Reset to page 1 when filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, activeTab]);
+  }, [statusFilter, activeTab, searchTerm]);
 
   // Stats calculation for current tab
   const totalRequests = currentRequests.length;
@@ -708,15 +718,15 @@ const StudentRequests: React.FC = () => {
         border: '1px solid #E8D1A7',
         boxShadow: '0 4px 15px rgba(154,91,52,0.1)',
       }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'auto 1fr',
-          gap: '20px',
-          alignItems: 'center'
-        }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           {/* Status Filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '0.95rem', fontWeight: '600', color: '#2A1F16' }}>
+            <span style={{ 
+              fontSize: '0.95rem', 
+              fontWeight: '600', 
+              color: '#2A1F16',
+              whiteSpace: 'nowrap' // This line prevents the text wrapping
+            }}>
               Status Filter:
             </span>
             <select
@@ -739,6 +749,29 @@ const StudentRequests: React.FC = () => {
               <option value="APPROVED">✅ Approved</option>
               <option value="REJECTED">❌ Rejected</option>
             </select>
+          </div>
+          
+          {/* Search Bar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '0.95rem', fontWeight: '600', color: '#2A1F16' }}>
+              Search:
+            </span>
+            <input
+              type="text"
+              placeholder="Search by book name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                padding: '10px 12px',
+                border: '2px solid #ddd',
+                borderRadius: '8px',
+                background: 'white',
+                fontSize: '0.9rem',
+                fontWeight: '500',
+                color: '#2A1F16',
+                minWidth: '200px',
+              }}
+            />
           </div>
         </div>
       </div>

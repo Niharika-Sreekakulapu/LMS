@@ -61,20 +61,26 @@ const StudentBorrows: React.FC = () => {
   };
 
   const getDaysUntilDue = (dueDate: string) => {
-    const due = new Date(dueDate);
+    // Use start of current day for consistency with backend
     const now = new Date();
-    const diffTime = due.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const due = new Date(dueDate);
+    const diffTime = due.getTime() - startOfToday.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
   };
 
   const getDaysOverdue = (dueDate: string, returnDate?: string) => {
     if (returnDate) return 0; // Already returned
 
-    const due = new Date(dueDate);
+    // Use start of current day for consistency with backend
     const now = new Date();
-    const diffTime = now.getTime() - due.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const due = new Date(dueDate);
+    const diffTime = startOfToday.getTime() - due.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     return Math.max(0, diffDays);
   };
 
@@ -82,7 +88,68 @@ const StudentBorrows: React.FC = () => {
     const daysUntilDue = getDaysUntilDue(borrow.dueDate);
     const daysOverdue = getDaysOverdue(borrow.dueDate, borrow.returnedAt);
 
-    if (borrow.status === 'RETURNED') {
+    // Priority: LOST > DAMAGED > LATE_RETURNED > RETURNED > OVERDUE > DUE SOON
+    if (borrow.status === 'LOST') {
+      return (
+        <span
+          style={{
+            color: '#7c2d12',
+            fontWeight: '600',
+            backgroundColor: '#feefee',
+            border: '1px solid #f44336',
+            padding: '12px 20px',
+            borderRadius: '25px',
+            fontSize: '0.9em',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          ❌ LOST BOOK
+        </span>
+      );
+    } else if (borrow.status === 'DAMAGED') {
+      return (
+        <span
+          style={{
+            color: '#e65100',
+            fontWeight: '600',
+            backgroundColor: '#fff3e0',
+            border: '1px solid #ff9800',
+            padding: '12px 20px',
+            borderRadius: '25px',
+            fontSize: '0.9em',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          🔧 DAMAGED
+        </span>
+      );
+    } else if (borrow.status === 'LATE_RETURNED') {
+      return (
+        <span
+          style={{
+            color: '#f57c00',
+            fontWeight: '600',
+            backgroundColor: '#fff3e0',
+            border: '1px solid #ff9800',
+            padding: '12px 20px',
+            borderRadius: '25px',
+            fontSize: '0.9em',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          ⏰ LATE RETURN
+        </span>
+      );
+    } else if (borrow.status === 'RETURNED') {
       return (
         <span
           style={{
@@ -99,7 +166,7 @@ const StudentBorrows: React.FC = () => {
             whiteSpace: 'nowrap',
           }}
         >
-          RETURNED
+          ✅ RETURNED
         </span>
       );
     } else if (daysOverdue > 0) {
@@ -119,7 +186,7 @@ const StudentBorrows: React.FC = () => {
             whiteSpace: 'nowrap',
           }}
         >
-          {daysOverdue} DAYS OVERDUE
+          ⚠️ {daysOverdue} DAYS OVERDUE
         </span>
       );
     } else {
@@ -139,7 +206,7 @@ const StudentBorrows: React.FC = () => {
             whiteSpace: 'nowrap',
           }}
         >
-          {daysUntilDue > 0 ? `Due in ${daysUntilDue} days` : 'Due Today'}
+          📅 {daysUntilDue > 0 ? `Due in ${daysUntilDue} days` : 'Due Today'}
         </span>
       );
     }

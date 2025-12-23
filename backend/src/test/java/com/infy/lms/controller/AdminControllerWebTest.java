@@ -32,6 +32,12 @@ class AdminControllerWebTest {
     @MockBean
     private AuthService authService;
 
+    @MockBean
+    private com.infy.lms.repository.BookRequestRepository bookRequestRepository;
+
+    @MockBean
+    private com.infy.lms.repository.BookRepository bookRepository;
+
     @Test
     void approve_returnsMessageAndStatus() throws Exception {
         User u = new User();

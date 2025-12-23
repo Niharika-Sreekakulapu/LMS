@@ -4,7 +4,7 @@ import axios from "axios";
 import { resetPassword } from "../api/authApi";
 // We will use a custom styled back button inside the layout
 // import BackButton from "../components/BackButton";
-import libImage from "../assets/lib.webp";
+import loginImage from "../assets/login.jpg";
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -15,6 +15,8 @@ export default function ResetPasswordPage() {
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     const t = searchParams.get("token");
@@ -69,7 +71,7 @@ export default function ResetPasswordPage() {
         /* LEFT SIDE: IMAGE */
         .rp-image-section {
           flex: 1;
-          background-image: url(${libImage});
+          background-image: url(${loginImage});
           background-size: cover;
           background-position: center;
           position: relative;
@@ -141,6 +143,37 @@ export default function ResetPasswordPage() {
         .rp-input:focus {
           border-color: #B8860B; /* Gold focus */
           box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.1);
+        }
+
+        /* Password field eye icon wrapper */
+        .password-wrapper {
+          position: relative;
+          width: 100%;
+        }
+
+        .password-toggle-btn {
+          position: absolute;
+          right: 8px;
+          top: 30%;
+          bottom: 40%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          cursor: pointer;
+          font-size: 1rem;
+          color: #666;
+          padding: 2px;
+          display: flex;
+          align-items: center;
+          justify-content: right;
+          width: 28px;
+          height: 28px;
+          border-radius: 4px;
+          transition: color 0.2s;
+        }
+
+        .password-toggle-btn:hover {
+          color: #4A3328;
         }
 
         /* BUTTONS */
@@ -239,26 +272,46 @@ export default function ResetPasswordPage() {
 
               {/* New Password */}
               <div className="rp-input-group">
-                <input
-                  className="rp-input"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  type="password"
-                  placeholder="New Password (min 8 chars)"
-                  required
-                />
+                <div className="password-wrapper">
+                  <input
+                    className="rp-input"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    type={showNewPassword ? "text" : "password"}
+                    placeholder="New Password (min 8 chars)"
+                    required
+                    style={{ paddingRight: '30px' }}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                  >
+                    <i className={showNewPassword ? 'fas fa-eye-slash' : 'fas fa-eye'}></i>
+                  </button>
+                </div>
               </div>
 
               {/* Confirm Password */}
               <div className="rp-input-group">
-                <input
-                  className="rp-input"
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  type="password"
-                  placeholder="Confirm New Password"
-                  required
-                />
+                <div className="password-wrapper">
+                  <input
+                    className="rp-input"
+                    value={confirm}
+                    onChange={(e) => setConfirm(e.target.value)}
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Confirm New Password"
+                    required
+                    style={{ paddingRight: '30px' }}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  >
+                    <i className={showConfirmPassword ? 'fas fa-eye-slash' : 'fas fa-eye'}></i>
+                  </button>
+                </div>
               </div>
 
               <button type="submit" className="rp-submit-btn" disabled={loading}>

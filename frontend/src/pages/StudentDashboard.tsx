@@ -10,6 +10,7 @@ const StudentDashboard = () => {
     if (path.includes('requests')) return 'requests';
     if (path.includes('membership')) return 'membership';
     if (path.includes('borrows') || path.includes('history')) return 'borrows';
+    if (path.includes('waitlist')) return 'waitlist';
     if (path.includes('fines') || path.includes('penalty')) return 'fines';
     if (path.includes('profile')) return 'profile';
     return 'home'; // default - home/search first priority
@@ -26,6 +27,8 @@ const StudentDashboard = () => {
       navigate('/student-dashboard/membership');
     } else if (tab === 'borrows') {
       navigate('/student-dashboard/borrows');
+    } else if (tab === 'waitlist') {
+      navigate('/student-dashboard/waitlist');
     } else if (tab === 'fines') {
       navigate('/student-dashboard/fines');
     } else if (tab === 'profile') {
@@ -153,6 +156,22 @@ const StudentDashboard = () => {
             >
               <span style={{ fontSize: '1.1rem', width: '24px', textAlign: 'center' }}>🕰️</span>
               My Borrows
+            </button>
+          </li>
+
+          <li>
+            <button
+              onClick={() => handleTabClick('waitlist')}
+              style={tabStyles(activeTab === 'waitlist')}
+              onMouseEnter={(e) => {
+                if (activeTab !== 'waitlist') e.currentTarget.style.backgroundColor = 'rgba(255, 248, 225, 0.1)';
+              }}
+              onMouseLeave={(e) => {
+                if (activeTab !== 'waitlist') e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <span style={{ fontSize: '1.1rem', width: '24px', textAlign: 'center' }}>📋</span>
+              Waitlist
             </button>
           </li>
 

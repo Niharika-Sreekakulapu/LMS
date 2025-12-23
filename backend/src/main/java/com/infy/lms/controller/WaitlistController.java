@@ -15,6 +15,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/waitlist")
@@ -114,6 +115,16 @@ public class WaitlistController {
         Book book = bookRepository.findById(bookId).orElseThrow(() -> new RuntimeException("Book not found"));
         List<BookWaitlistDto> waitlist = waitlistService.getBookWaitlist(book);
         return ResponseEntity.ok(waitlist);
+    }
+
+    /**
+     * Get all active waitlists grouped by book (Admin/Librarian)
+     */
+    @GetMapping("/all")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LIBRARIAN')")
+    public ResponseEntity<Map<Long, List<BookWaitlistDto>>> getAllActiveWaitlists() {
+        Map<Long, List<BookWaitlistDto>> allWaitlists = waitlistService.getAllActiveWaitlists();
+        return ResponseEntity.ok(allWaitlists);
     }
 
     /**

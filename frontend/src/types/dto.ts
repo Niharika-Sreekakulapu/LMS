@@ -57,6 +57,8 @@ export interface Book {
   status?: 'AVAILABLE' | 'BORROWED' | 'RESERVED' | 'DAMAGED';
   mrp?: number;
   accessLevel?: 'NORMAL' | 'PREMIUM';
+  // Small explanatory text for reasons when a recommendation is returned from the API
+  recommendationReason?: string;
 }
 
 export interface BorrowHistory {

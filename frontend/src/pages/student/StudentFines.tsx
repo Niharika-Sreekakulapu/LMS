@@ -60,20 +60,7 @@ const StudentFines: React.FC = () => {
     setTimeout(() => setToastMessage(null), 5000);
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 
-    if (diffInDays === 0) return 'Today';
-    if (diffInDays === 1) return 'Yesterday';
-    if (diffInDays < 7) return `${diffInDays} days ago`;
-    return date.toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
 
 
 
@@ -640,7 +627,11 @@ const StudentFines: React.FC = () => {
                             fontSize: '0.9rem',
                             fontWeight: '500'
                           }}>
-                            {formatDate(penalty.dueDate)}
+                            {new Date(penalty.dueDate).toLocaleDateString('en-IN', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            })}
                           </div>
                         </div>
 
@@ -834,14 +825,24 @@ const StudentFines: React.FC = () => {
                             color: '#2A1F16',
                             marginBottom: '4px'
                           }}>
-                            {penalty.penaltyStatus === 'PAID' ? 'Payment Date' : 'Processed Date'}
+                            Payment Status
                           </div>
                           <div style={{
                             color: penalty.penaltyStatus === 'PAID' ? '#2e7d32' : '#ff9800',
                             fontWeight: '600'
                           }}>
-                            {formatDate(penalty.dueDate)}
-                            {penalty.penaltyStatus === 'WAIVED' && ' (Waived)'}
+                            {penalty.penaltyStatus === 'PAID' && penalty.paidAt
+                              ? new Date(penalty.paidAt).toLocaleDateString('en-IN', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })
+                              : penalty.penaltyStatus === 'PAID'
+                              ? 'Payment recorded'
+                              : penalty.penaltyStatus === 'WAIVED'
+                              ? 'Waived - No payment required'
+                              : 'Processed'
+                            }
                           </div>
                         </div>
 

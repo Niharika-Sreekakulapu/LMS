@@ -44,6 +44,9 @@ class AuthServiceImplTest {
     @Mock
     private BCryptPasswordEncoder passwordEncoder;
 
+    @Mock
+    private com.infy.lms.repository.BorrowRecordRepository borrowRecordRepository;
+
     // sample default values
     private RegistrationRequest registrationRequest;
 

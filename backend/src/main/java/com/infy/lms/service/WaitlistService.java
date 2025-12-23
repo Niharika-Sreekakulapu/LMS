@@ -2,10 +2,13 @@ package com.infy.lms.service;
 
 import com.infy.lms.dto.BookReservationDto;
 import com.infy.lms.dto.BookWaitlistDto;
+import com.infy.lms.dto.BorrowRequestDTO;
+import com.infy.lms.enums.BorrowStatus;
 import com.infy.lms.model.*;
 import com.infy.lms.repository.BookReservationRepository;
 import com.infy.lms.repository.BookWaitlistRepository;
 import com.infy.lms.repository.BorrowRecordRepository;
+import com.infy.lms.service.BorrowService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,11 +40,39 @@ public class WaitlistService {
      */
     @Transactional
     public BookWaitlistDto joinWaitlist(User student, Book book) {
-        // Check if already in waitlist
-        Optional<BookWaitlist> existing = waitlistRepository.findByStudentAndBookAndIsActiveTrue(student, book);
-        if (existing.isPresent()) {
+        System.out.println("🔍 WAITLIST JOIN: Starting joinWaitlist for student '" + student.getName() + "' and book '" + book.getTitle() + "'");
+
+        // Check if already in active waitlist
+        Optional<BookWaitlist> existingActive = waitlistRepository.findByStudentAndBookAndIsActiveTrue(student, book);
+        if (existingActive.isPresent()) {
+            System.out.println("❌ WAITLIST JOIN: Student is already in active waitlist for this book");
             throw new RuntimeException("Student is already in the waitlist for this book");
         }
+
+        // Check if there's an inactive entry for this student-book combination
+        // If so, we should reactivate it instead of creating a new one
+        List<BookWaitlist> allEntriesForStudentBook = waitlistRepository.findByStudentAndBook(student, book);
+        Optional<BookWaitlist> inactiveEntry = allEntriesForStudentBook.stream()
+                .filter(entry -> !entry.getIsActive())
+                .findFirst();
+
+        if (inactiveEntry.isPresent()) {
+            // Reactivate the existing entry
+            BookWaitlist entry = inactiveEntry.get();
+            entry.setIsActive(true);
+            entry.setJoinedAt(Instant.now()); // Reset join time
+            calculateAndUpdatePriority(entry);
+
+            System.out.println("🔄 WAITLIST JOIN: Reactivating existing waitlist entry");
+
+            BookWaitlist saved = waitlistRepository.save(entry);
+            updateQueuePositions(book);
+
+            System.out.println("✅ WAITLIST JOIN: Successfully reactivated waitlist entry with ID " + saved.getId());
+            return convertToDto(saved);
+        }
+
+        System.out.println("✅ WAITLIST JOIN: Creating new waitlist entry");
 
         // Create new waitlist entry
         BookWaitlist waitlistEntry = BookWaitlist.builder()
@@ -54,25 +85,27 @@ public class WaitlistService {
         // Calculate initial priority
         calculateAndUpdatePriority(waitlistEntry);
 
+        System.out.println("💾 WAITLIST JOIN: Saving waitlist entry");
+
         // Save and update queue positions
         BookWaitlist saved = waitlistRepository.save(waitlistEntry);
         updateQueuePositions(book);
+
+        System.out.println("✅ WAITLIST JOIN: Successfully joined waitlist with ID " + saved.getId());
 
         return convertToDto(saved);
     }
 
     /**
-     * Leave the waitlist
+     * Get all active waitlists grouped by book (admin/librarian view)
      */
-    @Transactional
-    public void leaveWaitlist(User student, Book book) {
-        Optional<BookWaitlist> waitlistEntry = waitlistRepository.findByStudentAndBookAndIsActiveTrue(student, book);
-        if (waitlistEntry.isPresent()) {
-            BookWaitlist entry = waitlistEntry.get();
-            entry.setIsActive(false);
-            waitlistRepository.save(entry);
-            updateQueuePositions(book);
-        }
+    public java.util.Map<Long, List<BookWaitlistDto>> getAllActiveWaitlists() {
+        List<BookWaitlist> allEntries = waitlistRepository.findByIsActiveTrue();
+        return allEntries.stream()
+                .collect(Collectors.groupingBy(
+                        entry -> entry.getBook().getId(),
+                        Collectors.mapping(this::convertToDto, Collectors.toList())
+                ));
     }
 
     /**
@@ -100,35 +133,45 @@ public class WaitlistService {
     }
 
     /**
-     * Handle book return - auto-allocate to highest priority student
+     * Leave the waitlist
      */
     @Transactional
-    public void handleBookReturn(Book book) {
+    public void leaveWaitlist(User student, Book book) {
+        Optional<BookWaitlist> waitlistEntry = waitlistRepository.findByStudentAndBookAndIsActiveTrue(student, book);
+        if (waitlistEntry.isPresent()) {
+            BookWaitlist entry = waitlistEntry.get();
+            entry.setIsActive(false);
+            waitlistRepository.save(entry);
+            updateQueuePositions(book);
+        }
+    }
+
+    /**
+     * Handle book return - immediately issue to highest priority student
+     */
+    @Transactional
+    public User handleBookReturn(Book book) {
         // Find highest priority student in waitlist
         List<BookWaitlist> waitlist = waitlistRepository.findActiveWaitlistForBook(book);
 
         if (!waitlist.isEmpty()) {
             BookWaitlist highestPriority = waitlist.get(0);
+            User student = highestPriority.getStudent();
 
-            // Create reservation for the student
-            BookReservation reservation = BookReservation.builder()
-                    .student(highestPriority.getStudent())
-                    .book(book)
-                    .reservedAt(Instant.now())
-                    .expiresAt(Instant.now().plus(24, ChronoUnit.HOURS)) // 24 hours to collect
-                    .status(BookReservation.ReservationStatus.ACTIVE)
-                    .notificationSent(false)
-                    .build();
-
-            reservationRepository.save(reservation);
-
-            // Remove student from waitlist
+            // Remove student from waitlist (they will get the book issued)
             highestPriority.setIsActive(false);
             waitlistRepository.save(highestPriority);
 
             // Update queue positions for remaining students
             updateQueuePositions(book);
+
+            System.out.println("✅ WAITLIST ALLOCATION: Book '" + book.getTitle() +
+                             "' will be issued to student '" + student.getName() + "' from waitlist");
+
+            return student; // Return the student who should get the book
         }
+
+        return null; // No one in waitlist
     }
 
     /**

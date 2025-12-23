@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getAllBorrowRecords } from '../../api/libraryApi';
+import { getAllBorrowRecords, waivePenalty, markPenaltyAsPaid } from '../../api/libraryApi';
 import type { BorrowHistory } from '../../types/dto';
 
 const Penalty: React.FC = () => {
@@ -57,15 +57,24 @@ const Penalty: React.FC = () => {
 
   // Filter transactions with penalties or fine situations
   const penaltyTransactions = transactions.filter((transaction) => {
+    // Exclude records that have been resolved (paid or waived)
+    if (transaction.penaltyStatus === 'PAID' || transaction.penaltyStatus === 'WAIVED') {
+      return false;
+    }
+
+    // Check if book has outstanding penalty (pending status)
+    const hasPendingPenalty = transaction.penaltyAmount && transaction.penaltyAmount > 0 &&
+                             transaction.penaltyStatus === 'PENDING';
+
     // Check if book is overdue (not returned and past due date)
     const isOverdue = !transaction.returnedAt && new Date(transaction.dueDate) < new Date();
     const isLost = transaction.status === 'LOST';
 
     if (statusFilter === 'ALL') {
-      return isOverdue || isLost;
+      return hasPendingPenalty || isOverdue || isLost;
     }
     return (
-      (statusFilter === 'OVERDUE' && isOverdue) ||
+      (statusFilter === 'OVERDUE' && (hasPendingPenalty || isOverdue)) ||
       (statusFilter === 'LOST' && isLost)
     );
   });
@@ -102,7 +111,8 @@ const Penalty: React.FC = () => {
     const isOverdue = !transaction.returnedAt && new Date(transaction.dueDate) < new Date();
     const overdueDays = isOverdue ? getOverdueDays(transaction.dueDate) : 0;
 
-    if (transaction.status === 'LOST') {
+    // Priority: LOST > DAMAGED > OVERDUE > other penalties > none
+    if (transaction.status === 'LOST' || transaction.penaltyType === 'LOST') {
       return (
         <span
           style={{
@@ -119,6 +129,25 @@ const Penalty: React.FC = () => {
           }}
         >
           ❌ LOST
+        </span>
+      );
+    } else if (transaction.status === 'DAMAGED' || transaction.penaltyType === 'DAMAGE') {
+      return (
+        <span
+          style={{
+            color: '#e65100',
+            fontWeight: '600',
+            backgroundColor: '#fff3e0',
+            border: '1px solid #fb8c00',
+            padding: '6px 14px',
+            borderRadius: '25px',
+            fontSize: '0.8em',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+          }}
+        >
+          🔧 DAMAGED
         </span>
       );
     } else if (overdueDays > 0) {
@@ -141,6 +170,26 @@ const Penalty: React.FC = () => {
           ⚠️ OVERDUE ({overdueDays} days)
         </span>
       );
+    } else if (transaction.penaltyStatus === 'PENDING' && transaction.penaltyAmount && transaction.penaltyAmount > 0) {
+      // Show pending penalty status for other cases
+      return (
+        <span
+          style={{
+            color: '#f57c00',
+            fontWeight: '600',
+            backgroundColor: '#fff8e1',
+            border: '1px solid #ff9800',
+            padding: '6px 14px',
+            borderRadius: '25px',
+            fontSize: '0.8em',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+          }}
+        >
+          💰 PENDING FINE
+        </span>
+      );
     }
     return null;
   };
@@ -149,10 +198,9 @@ const Penalty: React.FC = () => {
     setSelectedTransaction(transaction);
     setActionType(action);
     if (action === 'mark_paid') {
-      const isOverdue = !transaction.returnedAt && new Date(transaction.dueDate) < new Date();
-      const overdueDays = getOverdueDays(transaction.dueDate);
-      const overdueFine = isOverdue ? calculateOverdueFine(overdueDays, transaction.bookMrp) : 0;
-      setPaymentAmount(overdueFine.toString());
+      // For mark as paid, show the actual penalty amount from the database
+      const penaltyAmount = transaction.penaltyAmount || 0;
+      setPaymentAmount(penaltyAmount.toString());
     }
     setShowActionModal(true);
   };
@@ -160,53 +208,72 @@ const Penalty: React.FC = () => {
   const processAction = async () => {
     if (!selectedTransaction) return;
 
-    // TODO: Implement actual API calls for these actions
-    switch (actionType) {
-      case 'collect': {
-        const isOverdue = !selectedTransaction.returnedAt && new Date(selectedTransaction.dueDate) < new Date();
-        const overdueDays = getOverdueDays(selectedTransaction.dueDate);
-        const overdueFine = isOverdue ? calculateOverdueFine(overdueDays, selectedTransaction.bookMrp) : 0;
-        alert(`${formatCurrency(overdueFine)} collected from ${selectedTransaction.studentName}`);
-        break;
+    try {
+      console.log(`Processing action: ${actionType} for transaction ${selectedTransaction.id}`);
+
+      switch (actionType) {
+        case 'waive': {
+          console.log('Calling waivePenalty API...');
+          const result = await waivePenalty(selectedTransaction.id);
+          console.log('Waive API result:', result);
+          alert(`Fine waived successfully for ${selectedTransaction.bookTitle}`);
+          break;
+        }
+        case 'mark_paid': {
+          console.log('Calling markPenaltyAsPaid API...');
+          const result = await markPenaltyAsPaid(selectedTransaction.id);
+          console.log('Mark as Paid API result:', result);
+          alert(`Fine marked as paid successfully for ${selectedTransaction.bookTitle}`);
+          break;
+        }
       }
-      case 'mark_paid': {
-        const paymentAmt = parseFloat(paymentAmount) || 0;
-        alert(`₹${paymentAmt} marked as paid for ${selectedTransaction.bookTitle}`);
-        break;
-      }
-      case 'waive': {
-        alert(`Fine waived for ${selectedTransaction.bookTitle}`);
-        break;
-      }
-      case 'mark_returned': {
-        alert(`${selectedTransaction.bookTitle} marked as returned`);
-        break;
-      }
+
+      console.log('Refreshing transaction data...');
+      await new Promise(resolve => setTimeout(resolve, 500)); // Small delay to ensure backend update
+      await loadTransactions(); // Refresh the list
+      console.log('Data refresh complete');
+
+    } catch (error) {
+      console.error('Error processing action:', error);
+      alert(`Failed to process the action: ${error.message || 'Unknown error'}. Please try again.`);
     }
 
     setShowActionModal(false);
     setSelectedTransaction(null);
     setPaymentAmount('');
-    loadTransactions(); // Refresh the list
   };
 
   const getTotalOutstandingFines = () => {
-    return filteredPenalties.reduce((total, transaction) => {
-      const isOverdue = !transaction.returnedAt && new Date(transaction.dueDate) < new Date();
-      const overdueDays = getOverdueDays(transaction.dueDate);
-      const overdueFine = isOverdue ? calculateOverdueFine(overdueDays, transaction.bookMrp) : 0;
-      return total + overdueFine;
+    return transactions.reduce((total, transaction) => {
+      // Use the actual penalty amount from the database if pending
+      if (transaction.penaltyStatus === 'PENDING') {
+        return total + (transaction.penaltyAmount || 0);
+      }
+      return total;
     }, 0);
+  };
+
+  const getOverdueReturnsCount = () => {
+    return transactions.filter((t) => !t.returnedAt && new Date(t.dueDate) < new Date()).length;
+  };
+
+  const getLostBooksCount = () => {
+    return transactions.filter((t) => t.status === 'LOST').length;
+  };
+
+  const getDamagedBooksCount = () => {
+    return transactions.filter((t) => t.status === 'DAMAGED').length;
   };
 
   // Create fines history - includes all fines (both active and historical)
   const allFineHistory = transactions.filter((transaction) => {
-    // Books that were returned overdue, or currently overdue, or lost
+    // Books that were returned overdue, or currently overdue, or lost, or have completed penalties
     const wasOverdue = transaction.returnedAt && new Date(transaction.dueDate) < new Date(transaction.returnedAt);
     const isCurrentlyOverdue = !transaction.returnedAt && new Date(transaction.dueDate) < new Date();
     const isLost = transaction.status === 'LOST';
+    const hasCompletedPenalty = transaction.penaltyStatus === 'PAID' || transaction.penaltyStatus === 'WAIVED';
 
-    return wasOverdue || isCurrentlyOverdue || isLost;
+    return wasOverdue || isCurrentlyOverdue || isLost || hasCompletedPenalty;
   });
 
   // Filtered and sorted fines history
@@ -253,7 +320,42 @@ const Penalty: React.FC = () => {
     const isCurrentlyOverdue = !transaction.returnedAt && new Date(transaction.dueDate) < new Date();
     const isLost = transaction.status === 'LOST';
 
-    if (isLost) {
+    // Priority: PAID/WAIVED > LOST > OVERDUE > COLLECTED
+    if (transaction.penaltyStatus === 'PAID') {
+      return (
+        <span style={{
+          color: '#2e7d32',
+          fontWeight: '600',
+          backgroundColor: '#e8f5e8',
+          border: '1px solid #4caf50',
+          padding: '6px 14px',
+          borderRadius: '25px',
+          fontSize: '0.8rem',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '5px'
+        }}>
+          💰 PAID
+        </span>
+      );
+    } else if (transaction.penaltyStatus === 'WAIVED') {
+      return (
+        <span style={{
+          color: '#17a2b8',
+          fontWeight: '600',
+          backgroundColor: '#d1ecf1',
+          border: '1px solid #17a2b8',
+          padding: '6px 14px',
+          borderRadius: '25px',
+          fontSize: '0.8rem',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '5px'
+        }}>
+          🆓 WAIVED
+        </span>
+      );
+    } else if (isLost) {
       return (
         <span style={{
           color: '#ff8f00',
@@ -262,7 +364,7 @@ const Penalty: React.FC = () => {
           border: '1px solid #ffb74d',
           padding: '6px 14px',
           borderRadius: '25px',
-          fontSize: '0.8em',
+          fontSize: '0.8rem',
           display: 'inline-flex',
           alignItems: 'center',
           gap: '5px'
@@ -279,7 +381,7 @@ const Penalty: React.FC = () => {
           border: '1px solid #f44336',
           padding: '6px 14px',
           borderRadius: '25px',
-          fontSize: '0.8em',
+          fontSize: '0.8rem',
           display: 'inline-flex',
           alignItems: 'center',
           gap: '5px'
@@ -288,7 +390,6 @@ const Penalty: React.FC = () => {
         </span>
       );
     } else if (wasOverdue) {
-      // Assuming fine was collected if returned late (in reality we'd have a status field)
       return (
         <span style={{
           color: '#2e7d32',
@@ -297,7 +398,7 @@ const Penalty: React.FC = () => {
           border: '1px solid #4caf50',
           padding: '6px 14px',
           borderRadius: '25px',
-          fontSize: '0.8em',
+          fontSize: '0.8rem',
           display: 'inline-flex',
           alignItems: 'center',
           gap: '5px'
@@ -417,7 +518,7 @@ const Penalty: React.FC = () => {
                 marginBottom: '8px',
               }}
             >
-              {filteredPenalties.filter((t) => !t.returnedAt && new Date(t.dueDate) < new Date()).length}
+              {getOverdueReturnsCount()}
             </div>
             <div style={{ fontSize: '0.85rem', opacity: 0.9 }}>⚠️ Overdue Returns</div>
           </div>
@@ -439,9 +540,31 @@ const Penalty: React.FC = () => {
                 marginBottom: '8px',
               }}
             >
-              {filteredPenalties.filter((t) => t.status === 'LOST').length}
+              {getLostBooksCount()}
             </div>
             <div style={{ fontSize: '0.85rem', opacity: 0.9 }}>❌ Lost Books</div>
+          </div>
+
+          <div
+            style={{
+              background: 'linear-gradient(135deg,#ff5722 0%,#d84315 100%)',
+              color: 'white',
+              padding: '20px',
+              borderRadius: '12px',
+              textAlign: 'center',
+              boxShadow: '0 4px 15px rgba(255,87,34,0.3)',
+            }}
+          >
+            <div
+              style={{
+                fontSize: '2.5rem',
+                fontWeight: '700',
+                marginBottom: '8px',
+              }}
+            >
+              {getDamagedBooksCount()}
+            </div>
+            <div style={{ fontSize: '0.85rem', opacity: 0.9 }}>🔧 Damaged Books</div>
           </div>
         </div>
       )}
@@ -934,9 +1057,6 @@ const Penalty: React.FC = () => {
                     {filteredPenalties.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((transaction, index) => {
                       const isOverdue = !transaction.returnedAt && new Date(transaction.dueDate) < new Date();
                       const overdueDays = getOverdueDays(transaction.dueDate);
-                      // For overdue books that haven't been returned yet, calculate the fine
-                      const overdueFine = isOverdue ? calculateOverdueFine(overdueDays, transaction.bookMrp) : 0;
-                      const totalFine = overdueFine;
 
                       return (
                         <tr
@@ -1011,11 +1131,13 @@ const Penalty: React.FC = () => {
                           {/* Fine Amount */}
                           <td style={{ padding: '20px 12px', textAlign: 'center', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: '700', color: '#dc3545', fontSize: '1.1rem', marginBottom: '4px' }}>
-                              {formatCurrency(totalFine)}
+                              {formatCurrency(transaction.penaltyAmount || 0)}
                             </div>
-                            {totalFine > 0 && overdueFine > 0 && (
+                            {transaction.penaltyAmount && transaction.penaltyAmount > 0 && (
                               <div style={{ fontSize: '0.75rem', color: '#6c757d' }}>
-                                Overdue: {formatCurrency(overdueFine)}
+                                {transaction.penaltyType === 'LATE' ? 'Late fee' :
+                                 transaction.penaltyType === 'DAMAGE' ? 'Damage charge' :
+                                 transaction.penaltyType === 'LOST' ? 'Replacement cost' : 'Penalty'}
                               </div>
                             )}
                           </td>
@@ -1047,15 +1169,11 @@ const Penalty: React.FC = () => {
                                 onMouseOut={(e) => (e.currentTarget.style.borderColor = '#ddd')}
                               >
                                 <option value="">Select Action</option>
-                                {totalFine > 0 && (
+                                {(transaction.penaltyAmount && transaction.penaltyAmount > 0) && (
                                   <>
-                                    <option value="collect">💰 Collect Fine</option>
                                     <option value="waive">🆓 Waive Fine</option>
                                     <option value="mark_paid">💳 Mark as Paid</option>
                                   </>
-                                )}
-                                {!transaction.returnedAt && (
-                                  <option value="mark_returned">✅ Mark Returned</option>
                                 )}
                               </select>
                             </div>
@@ -1227,11 +1345,15 @@ const Penalty: React.FC = () => {
                           {/* Fine Amount */}
                           <td style={{ padding: '20px 12px', textAlign: 'center', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: '700', color: '#dc3545', fontSize: '1.1rem', marginBottom: '4px' }}>
-                              {formatCurrency(overdueFine)}
+                              {formatCurrency(transaction.penaltyAmount || overdueFine)}
                             </div>
-                            {overdueFine > 0 && transaction.bookMrp && (
+                            {(transaction.penaltyAmount || overdueFine) > 0 && transaction.bookMrp && (
                               <div style={{ fontSize: '0.75rem', color: '#6c757d' }}>
-                                {formatCurrency(transaction.bookMrp * 0.1)}/day × {overdueDays} days
+                                {transaction.penaltyType === 'LATE' && overdueDays > 0 ?
+                                  `${formatCurrency(transaction.bookMrp * 0.1)}/day × ${overdueDays} days` :
+                                  transaction.penaltyType === 'LOST' ? 'Replacement cost' :
+                                  transaction.penaltyType === 'DAMAGE' ? 'Damage charge' :
+                                  'Penalty'}
                               </div>
                             )}
                           </td>
@@ -1554,7 +1676,8 @@ const Penalty: React.FC = () => {
                 }}
               >
                 Confirm {actionType === 'collect' ? 'Collect' :
-                        actionType === 'waive' ? 'Waive' : 'Mark Returned'}
+                        actionType === 'waive' ? 'Waive' :
+                        actionType === 'mark_paid' ? 'Mark as Paid' : 'Mark Returned'}
               </button>
             </div>
           </div>

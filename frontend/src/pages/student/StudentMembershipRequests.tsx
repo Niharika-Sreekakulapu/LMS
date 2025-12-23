@@ -21,6 +21,8 @@ const StudentMembershipRequests: React.FC = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showExtensionModal, setShowExtensionModal] = useState(false);
   const [extendingSubscription, setExtendingSubscription] = useState<string | null>(null);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [requestingBookData, setRequestingBookData] = useState<Book | null>(null);
 
   // Toast notification state
   const [toastMessage, setToastMessage] = useState<{type: 'success' | 'error', message: string} | null>(null);
@@ -177,6 +179,46 @@ const StudentMembershipRequests: React.FC = () => {
       showToast('error', errorMessage);
     } finally {
       setExtendingSubscription(null);
+    }
+  };
+
+  const confirmRequestBook = async () => {
+    if (!requestingBookData) return;
+
+    setRequestingBook(requestingBookData.id);
+    setShowRequestModal(false);
+    setRequestingBookData(null);
+
+    try {
+      await createIssueRequest(requestingBookData.id);
+
+      // Refresh data
+      await loadPremiumBooks();
+
+      // Show success toast
+      setToastMessage({ type: 'success', message: 'Premium book request submitted successfully! Enjoy extended borrowing benefits.' });
+      setTimeout(() => setToastMessage(null), 5000);
+
+    } catch (error: unknown) {
+      console.error('Error requesting book:', error);
+      const axiosError = error as { response?: { data?: { message?: string } } };
+      const errorMessage = axiosError.response?.data?.message || '';
+      if (errorMessage.includes('already requested')) {
+        // Show error toast
+        setToastMessage({ type: 'error', message: 'You have already requested this book' });
+        setTimeout(() => setToastMessage(null), 5000);
+      } else if (errorMessage.includes('overdue')) {
+        setToastMessage({ type: 'error', message: 'Cannot request books while you have overdue items' });
+        setTimeout(() => setToastMessage(null), 5000);
+      } else if (errorMessage.includes('Monthly request limit exceeded')) {
+        setToastMessage({ type: 'error', message: 'Monthly request limit exceeded (3 books per month)' });
+        setTimeout(() => setToastMessage(null), 5000);
+      } else {
+        setToastMessage({ type: 'error', message: 'Failed to submit book request' });
+        setTimeout(() => setToastMessage(null), 5000);
+      }
+    } finally {
+      setRequestingBook(null);
     }
   };
 
@@ -872,20 +914,10 @@ const StudentMembershipRequests: React.FC = () => {
                       </div>
 
                       <button
-                        onClick={async () => {
-                          if (requestingBook === book.id) return;
-                          setRequestingBook(book.id);
-                          try {
-                            await createIssueRequest(book.id);
-                            showToast('success', `Request for "${book.title}" submitted successfully!`);
-                            // Reload books to update availability
-                            await loadPremiumBooks();
-                          } catch (error) {
-                            console.error('Error requesting book:', error);
-                            showToast('error', 'Failed to submit book request. Please try again.');
-                          } finally {
-                            setRequestingBook(null);
-                          }
+                        onClick={() => {
+                          console.log('Opening request modal for book:', book.title);
+                          setRequestingBookData(book);
+                          setShowRequestModal(true);
                         }}
                         disabled={!(book.availableCopies && book.availableCopies > 0) || requestingBook === book.id}
                         style={{
@@ -1401,6 +1433,341 @@ const StudentMembershipRequests: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Request Confirmation Modal - Matching StudentHome.tsx style */}
+      {showRequestModal && requestingBookData && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '20px',
+          backdropFilter: 'blur(5px)'
+        }}>
+          <div style={{
+            background: 'linear-gradient(145deg, #ffffff 0%, #fefefe 100%)',
+            borderRadius: '20px',
+            maxWidth: '600px',
+            width: '100%',
+            maxHeight: '85vh',
+            overflow: 'hidden',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            border: '2px solid rgba(139,69,19,0.1)',
+            position: 'relative'
+          }}>
+
+            {/* Modal Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #8B4513 0%, #A0522D 100%)',
+              color: 'white',
+              padding: '30px 60px',
+              textAlign: 'center',
+              position: 'relative',
+              overflow: 'hidden'
+            }}>
+              {/* Decorative background */}
+              <div style={{
+                position: 'absolute',
+                top: '-50%',
+                right: '-20%',
+                width: '150px',
+                height: '150px',
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,0.1)',
+              }} />
+              <div style={{
+                position: 'absolute',
+                bottom: '-30%',
+                left: '-15%',
+                width: '120px',
+                height: '120px',
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,0.08)',
+              }} />
+
+              <div style={{ position: 'relative', zIndex: 2 }}>
+                <h1 style={{
+                  fontSize: '1.8rem',
+                  fontWeight: '700',
+                  margin: '0 0 8px 0',
+                  textShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                  lineHeight: '1.2'
+                }}>
+                  {requestingBookData.title}
+                </h1>
+                <p style={{
+                  fontSize: '1.1rem',
+                  margin: '0',
+                  opacity: 0.9,
+                  fontWeight: '300'
+                }}>
+                  by {requestingBookData.author}
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '25px', overflowY: 'auto', maxHeight: 'calc(85vh - 150px)' }}>
+
+
+              {/* Book Stats */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '15px',
+                marginBottom: '25px'
+              }}>
+                <div style={{
+                  background: 'linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%)',
+                  borderRadius: '12px',
+                  padding: '15px',
+                  textAlign: 'center',
+                  border: '1px solid #e9ecef'
+                }}>
+                  <div style={{
+                    fontSize: '2rem',
+                    marginBottom: '5px'
+                  }}>
+                    {(requestingBookData.availableCopies || 0) > 0 ? '🟢' : '🔴'}
+                  </div>
+                  <div style={{
+                    fontSize: '1.2rem',
+                    fontWeight: '700',
+                    color: (requestingBookData.availableCopies || 0) > 0 ? '#28a745' : '#dc3545'
+                  }}>
+                    {requestingBookData.availableCopies}
+                  </div>
+                  <div style={{
+                    fontSize: '0.8rem',
+                    color: '#6c757d',
+                    fontWeight: '500'
+                  }}>
+                    Available
+                  </div>
+                </div>
+
+                <div style={{
+                  background: 'linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%)',
+                  borderRadius: '12px',
+                  padding: '15px',
+                  textAlign: 'center',
+                  border: '1px solid #e9ecef'
+                }}>
+                  <div style={{
+                    fontSize: '2rem',
+                    marginBottom: '5px'
+                  }}>
+                    📚
+                  </div>
+                  <div style={{
+                    fontSize: '1.2rem',
+                    fontWeight: '700',
+                    color: '#2A1F16'
+                  }}>
+                    {requestingBookData.totalCopies}
+                  </div>
+                  <div style={{
+                    fontSize: '0.8rem',
+                    color: '#6c757d',
+                    fontWeight: '500'
+                  }}>
+                    Total Copies
+                  </div>
+                </div>
+              </div>
+
+              {/* Book Details */}
+              <div style={{ marginBottom: '25px' }}>
+                <h3 style={{
+                  color: '#2A1F16',
+                  fontSize: '1.1rem',
+                  fontWeight: '600',
+                  margin: '0 0 15px 0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  📖 Book Information
+                </h3>
+
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '15px'
+                }}>
+                  {requestingBookData.genre && (
+                    <div style={{
+                      background: '#fff3e0',
+                      padding: '10px 15px',
+                      borderRadius: '8px',
+                      border: '1px solid #ffcc02'
+                    }}>
+                      <div style={{
+                        fontSize: '0.8rem',
+                        color: '#f57c00',
+                        fontWeight: '600',
+                        marginBottom: '3px'
+                      }}>
+                        CATEGORY
+                      </div>
+                      <div style={{
+                        fontSize: '0.9rem',
+                        color: '#2A1F16',
+                        fontWeight: '500'
+                      }}>
+                        {requestingBookData.genre}
+                      </div>
+                    </div>
+                  )}
+
+                  {requestingBookData.publisher && (
+                    <div style={{
+                      background: '#f3e5f5',
+                      padding: '10px 15px',
+                      borderRadius: '8px',
+                      border: '1px solid #ba68c8'
+                    }}>
+                      <div style={{
+                        fontSize: '0.8rem',
+                        color: '#7b1fa2',
+                        fontWeight: '600',
+                        marginBottom: '3px'
+                      }}>
+                        PUBLISHER
+                      </div>
+                      <div style={{
+                        fontSize: '0.9rem',
+                        color: '#2A1F16',
+                        fontWeight: '500'
+                      }}>
+                        {requestingBookData.publisher}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+
+              {/* Action Section */}
+              <div style={{
+                display: 'flex',
+                gap: '15px',
+                justifyContent: 'center',
+                alignItems: 'center'
+              }}>
+                <button
+                  onClick={confirmRequestBook}
+                  disabled={requestingBook === requestingBookData.id}
+                  style={{
+                    background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    padding: '15px 25px',
+                    fontSize: '1.1rem',
+                    fontWeight: '600',
+                    cursor: requestingBook === requestingBookData.id ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 15px rgba(40,167,69,0.3)',
+                    opacity: requestingBook === requestingBookData.id ? 0.6 : 1,
+                    transition: 'all 0.3s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    flex: 2
+                  }}
+                  onMouseEnter={(e) => {
+                    if (requestingBook !== requestingBookData.id) {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 6px 20px rgba(40,167,69,0.4)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 15px rgba(40,167,69,0.3)';
+                  }}
+                >
+                  {requestingBook === requestingBookData.id ? (
+                    <>
+                      <div style={{
+                        width: '20px',
+                        height: '20px',
+                        border: '2px solid rgba(255,255,255,0.3)',
+                        borderTop: '2px solid white',
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite'
+                      }} />
+                      Processing Request...
+                    </>
+                  ) : (
+                    <>
+                      ⭐ Confirm Premium Book Request
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowRequestModal(false);
+                    setRequestingBookData(null);
+                  }}
+                  style={{
+                    padding: '14px 30px',
+                    background: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    boxShadow: '0 4px 12px rgba(108, 117, 125, 0.3)',
+                    flex: 1,
+                    maxWidth: '150px'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#5a6268';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(108, 117, 125, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#6c757d';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(108, 117, 125, 0.3)';
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <div style={{
+                color: '#28a745',
+                fontSize: '0.9rem',
+                textAlign: 'center',
+                fontWeight: '500',
+                marginTop: '15px'
+              }}>
+                ✅ Your premium request will be processed with priority!
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add spin animation */}
+      <style>
+        {`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}
+      </style>
     </div>
   );
 };

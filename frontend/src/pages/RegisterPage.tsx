@@ -1,4 +1,4 @@
-import libImage from "../assets/lib.webp";
+import loginImage from "../assets/login.jpg";
 
 export default function RegisterPage() {
   return (
@@ -20,7 +20,7 @@ export default function RegisterPage() {
         /* LEFT SIDE: IMAGE */
         .rp-image-section {
           flex: 1;
-          background-image: url('${libImage}'); /* Library image */
+          background-image: url(${loginImage}); /* Library image */
           background-size: cover;
           background-position: center;
           position: relative;
@@ -93,7 +93,8 @@ export default function RegisterPage() {
         }
 
         .rp-btn:hover {
-          background-color: #B8A99A; /* Darker tan on hover */
+          background-color: #B8A99A; 
+          color: #3E2723;
           transform: translateY(-2px);
         }
 

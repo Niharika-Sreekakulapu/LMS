@@ -4,7 +4,7 @@ import { register } from "../api/authApi";
 import type { RegistrationRequest } from "../types/dto";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import libImage from "../assets/lib.webp";
+import loginImage from "../assets/login.jpg";
 
 type FieldErrors = Record<string, string>;
 
@@ -27,6 +27,7 @@ export default function StudentRegisterPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [studentIdFile, setStudentIdFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nav = useNavigate();
@@ -209,6 +210,42 @@ export default function StudentRegisterPage() {
           box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.1);
         }
 
+        /* Password field eye icon wrapper */
+        .password-wrapper {
+          position: relative;
+          width: 100%;
+        }
+
+        /* Ensure input inside wrapper has enough right padding to avoid overlap */
+        .password-wrapper .sp-input {
+          padding-right: 48px !important;
+        }
+
+        .password-toggle-btn {
+          position: absolute;
+          right: 8px;
+          top: 30%;
+          bottom: 40%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          cursor: pointer;
+          font-size: 1rem;
+          color: #666;
+          padding: 2px;
+          display: flex;
+          align-items: center;
+          justify-content: right;
+          width: 28px;
+          height: 28px;
+          border-radius: 4px;
+          transition: color 0.2s;
+        }
+
+        .password-toggle-btn:hover {
+          color: #4A3328;
+        }
+
         /* BUTTONS */
         .sp-upload-btn {
           width: 100%;
@@ -297,7 +334,7 @@ export default function StudentRegisterPage() {
         {/* LEFT: IMAGE */}
         <div
           className="sp-image-section"
-          style={{ backgroundImage: `url(${libImage})` }}
+          style={{ backgroundImage: `url(${loginImage})` }}
         >
           <div className="sp-image-overlay" />
         </div>
@@ -312,14 +349,35 @@ export default function StudentRegisterPage() {
             <form onSubmit={onSubmit}>
               {fields.map((f) => (
                 <div key={String(f.name)} className="sp-input-group">
-                  <input
-                    className="sp-input"
-                    name={String(f.name)}
-                    placeholder={f.label}
-                    type={f.type ?? "text"}
-                    value={(form[f.name] as unknown) as string}
-                    onChange={onChange}
-                  />
+                  {f.name === 'password' ? (
+                    <div className="password-wrapper">
+                      <input
+                        className="sp-input"
+                        name={String(f.name)}
+                        placeholder={f.label}
+                        type={showPassword ? "text" : "password"}
+                        value={(form[f.name] as unknown) as string}
+                        onChange={onChange}
+                        style={{ paddingRight: '40px' }}
+                      />
+                      <button
+                        type="button"
+                        className="password-toggle-btn"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        <i className={showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'}></i>
+                      </button>
+                    </div>
+                  ) : (
+                    <input
+                      className="sp-input"
+                      name={String(f.name)}
+                      placeholder={f.label}
+                      type={f.type ?? "text"}
+                      value={(form[f.name] as unknown) as string}
+                      onChange={onChange}
+                    />
+                  )}
                   {errors[String(f.name)] && (
                     <p className="error-text">{errors[String(f.name)]}</p>
                   )}

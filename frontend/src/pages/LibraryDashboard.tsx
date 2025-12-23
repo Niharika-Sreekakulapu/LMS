@@ -36,6 +36,7 @@ export default function LibraryDashboard() {
     if (path.includes("requests") && !path.includes("acquisition")) return "requests";
     if (path.includes("acquisition-requests")) return "acquisition-requests";
     if (path.includes("returns")) return "returns";
+    if (path.includes("waitlist")) return "waitlist";
     if (path.includes("manage-book") || path.includes("add-book")) return "inventory";
     if (path.includes("penalty")) return "penalties";
     if (path.includes("reports")) return "reports";
@@ -116,6 +117,7 @@ export default function LibraryDashboard() {
             { key: "requests", label: "Issues", icon: "⚠️" },
             { key: "acquisition-requests", label: "Acquisitions", icon: "📚" },
             { key: "returns", label: "Returns", icon: "🔄" },
+            { key: "waitlist", label: "Waitlist", icon: "📋" },
             { key: "penalties", label: "Penalties", icon: "💰" },
             { key: "ai-analytics", label: "AI Analytics", icon: "🤖" },
             { key: "reports", label: "Reports", icon: "📊" },

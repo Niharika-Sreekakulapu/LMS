@@ -25,8 +25,12 @@ function ReturnsPage() {
 
   useEffect(() => {
     loadBorrows();
+    loadReturnHistory();
     // Auto-refresh every 30 seconds
-    const interval = setInterval(loadBorrows, 30000);
+    const interval = setInterval(() => {
+      loadBorrows();
+      loadReturnHistory();
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -338,10 +342,7 @@ function ReturnsPage() {
                 color: 'white', padding: '16px', borderRadius: '8px', textAlign: 'center'
               }}>
                 <div style={{ fontSize: '1.8rem', fontWeight: '700' }}>
-                  {(() => {
-                    const goodReturns = returnedBooks.filter(b => b.status !== 'LOST' && b.status !== 'DAMAGED').length;
-                    return goodReturns;
-                  })()}
+                  {returnedBooks.filter(b => b.status === 'RETURNED').length}
                 </div>
                 <div>Good Returns</div>
               </div>
@@ -426,12 +427,7 @@ function ReturnsPage() {
           )}
         </button>
         <button
-          onClick={() => {
-            setActiveTab('history');
-            if (returnedBooks.length === 0) {
-              loadReturnHistory();
-            }
-          }}
+          onClick={() => setActiveTab('history')}
           style={{
             flex: 1,
             padding: '16px 20px',
@@ -450,6 +446,22 @@ function ReturnsPage() {
           }}
         >
           📚 Return History
+          {returnedBooks.length > 0 && (
+            <span style={{
+              background: activeTab === 'history' ? '#2A1F16' : '#999',
+              color: 'white',
+              borderRadius: '50%',
+              width: '20px',
+              height: '20px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.8rem',
+              fontWeight: '600'
+            }}>
+              {returnedBooks.length}
+            </span>
+          )}
         </button>
       </div>
 

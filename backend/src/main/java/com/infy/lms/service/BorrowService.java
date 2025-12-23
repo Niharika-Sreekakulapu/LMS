@@ -57,6 +57,18 @@ public interface BorrowService {
      */
     void reconcileOverdues();
 
+    /**
+     * Send due date alert notifications for books due in 2 days (intended to be called from a scheduler).
+     * Should find all active borrows due in exactly 2 days and send email notifications to students.
+     */
+    void sendDueDateAlerts();
+
+    /**
+     * Send low stock alert notifications for books with 2 or fewer available copies (intended to be called from a scheduler).
+     * Should find all books with low stock and send email notifications to administrators.
+     */
+    void sendLowStockAlerts();
+
     // --- Penalty / payment API ---
     /**
      * List pending penalties for a specific member.
