@@ -1,0 +1,280 @@
+package com.infy.lms.controller;
+
+import com.infy.lms.dto.BorrowHistoryDTO;
+import com.infy.lms.dto.BorrowRequestDTO;
+import com.infy.lms.dto.ReturnRequestDTO;
+import com.infy.lms.enums.BorrowStatus;
+import com.infy.lms.exception.BorrowException;
+import com.infy.lms.model.Book;
+import com.infy.lms.model.BorrowRecord;
+import com.infy.lms.repository.BookRepository;
+import com.infy.lms.repository.UserRepository;
+import com.infy.lms.service.BorrowService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/api")
+@RequiredArgsConstructor
+@CrossOrigin(origins = "*")
+public class BorrowController {
+
+    private final BorrowService borrowService;
+    private final UserRepository userRepo;
+    private final BookRepository bookRepo;
+    private final com.infy.lms.repository.BorrowRecordRepository borrowRepo;
+    private final com.infy.lms.service.SecurityService securityService;
+
+    // 1) Borrow a book
+    @PreAuthorize("hasAnyRole('STUDENT','LIBRARIAN','ADMIN')")
+    @PostMapping("/borrow")
+    public ResponseEntity<?> borrowBook(@RequestBody BorrowRequestDTO req) {
+        try {
+            return ResponseEntity.status(HttpStatus.CREATED).body(borrowService.borrowBook(req));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    // 2) Return a book
+    @PreAuthorize("hasAnyRole('STUDENT','LIBRARIAN','ADMIN')")
+    @PostMapping("/return")
+    public ResponseEntity<?> returnBook(@RequestBody Map<String, Object> requestMap) {
+        System.out.println("🔍 CONTROLLER: Return request received");
+        System.out.println("   Raw request: " + requestMap);
+
+        try {
+            ReturnRequestDTO req = new ReturnRequestDTO();
+
+            // Manually map the fields
+            if (requestMap.containsKey("borrowRecordId")) {
+                req.setBorrowRecordId(Long.valueOf(requestMap.get("borrowRecordId").toString()));
+            }
+            if (requestMap.containsKey("damaged")) {
+                req.setDamaged(Boolean.parseBoolean(requestMap.get("damaged").toString()));
+            }
+            if (requestMap.containsKey("lost")) {
+                req.setLost(Boolean.parseBoolean(requestMap.get("lost").toString()));
+            }
+
+            System.out.println("   Mapped DTO:");
+            System.out.println("   borrowRecordId: " + req.getBorrowRecordId());
+            System.out.println("   damaged: " + req.isDamaged());
+            System.out.println("   lost: " + req.isLost());
+
+            if (req.getBorrowRecordId() == null) {
+                return ResponseEntity.badRequest().body(Map.of("message", "borrowRecordId required"));
+            }
+
+            String res = borrowService.returnBook(req);
+            return ResponseEntity.ok(Map.of("message", res));
+        } catch (Exception ex) {
+            System.out.println("❌ CONTROLLER: Exception in returnBook: " + ex.getMessage());
+            ex.printStackTrace();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    // 3) Member history (owner or librarian/admin)
+    @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN') or @securityService.getCurrentUserId() == #memberId")
+    @GetMapping("/members/{memberId}/history")
+    public ResponseEntity<List<BorrowHistoryDTO>> getHistory(@PathVariable Long memberId) {
+        return ResponseEntity.ok(borrowService.getBorrowHistory(memberId));
+    }
+
+    // 4) Flexible find / filter endpoint
+    // example: GET /api/borrow?studentId=1&bookId=2&status=BORROWED&overdue=true
+    @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN') or #studentId == null or @securityService.getCurrentUserId() == #studentId")
+    @GetMapping("/borrow")
+    public ResponseEntity<List<BorrowHistoryDTO>> findBorrows(
+            @RequestParam(required = false) Long studentId,
+            @RequestParam(required = false) Long bookId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Boolean overdue
+    ) {
+        return ResponseEntity.ok(borrowService.findBorrows(studentId, bookId, status, overdue));
+    }
+
+    // 5) Overdue list (admin/librarian or owner via studentId)
+    // GET /api/borrow/overdue?studentId=123
+    @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN') or #studentId == null or @securityService.getCurrentUserId() == #studentId")
+    @GetMapping("/borrow/overdue")
+    public ResponseEntity<List<BorrowHistoryDTO>> getOverdue(@RequestParam(required = false) Long studentId) {
+        return ResponseEntity.ok(borrowService.getOverdueBorrows(studentId));
+    }
+
+    // 6) Compute & persist penalty for a borrow record (admin/librarian)
+    @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN')")
+    @PostMapping("/borrow/{borrowId}/penalty/compute")
+    public ResponseEntity<?> computePenalty(@PathVariable Long borrowId) {
+        try {
+            double penalty = borrowService.computeAndSetPenalty(borrowId);
+            return ResponseEntity.ok(Map.of("borrowId", borrowId, "penalty", penalty));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    // 7) Pay penalty for a borrow record.
+    // Security: allow librarian/admin OR the student who owns the record (memberId query param)
+    // POST /api/borrow/{borrowId}/penalty/pay?memberId=123&amount=100
+    @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN') or @securityService.getCurrentUserId() == #memberId")
+    @PostMapping("/borrow/{borrowId}/penalty/pay")
+    public ResponseEntity<?> payPenalty(
+            @PathVariable Long borrowId,
+            @RequestParam Long memberId,
+            @RequestParam double amount
+    ) {
+        try {
+            double remaining = borrowService.payPenalty(borrowId, amount);
+            return ResponseEntity.ok(Map.of("borrowId", borrowId, "remaining", remaining));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    // 8) Manual reconcile trigger (admin only). Useful for testing.
+    @PreAuthorize("hasAnyRole('ADMIN')")
+    @PostMapping("/borrow/reconcile")
+    public ResponseEntity<?> reconcileNow() {
+        try {
+            borrowService.reconcileOverdues();
+            return ResponseEntity.ok(Map.of("message", "Reconciliation triggered"));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    // --- Penalty endpoints ---
+
+    // Member: list their ALL penalties (pending, paid, waived)
+    @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN') or @securityService.getCurrentUserId() == #memberId")
+    @GetMapping("/members/{memberId}/penalties")
+    public ResponseEntity<List<com.infy.lms.dto.PenaltyDTO>> getMemberPenalties(@PathVariable Long memberId) {
+        List<com.infy.lms.dto.PenaltyDTO> list = borrowService.getAllPenaltiesForMember(memberId);
+        return ResponseEntity.ok(list);
+    }
+
+    // Member: list their PENDING penalties only (for compatibility)
+    @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN') or @securityService.getCurrentUserId() == #memberId")
+    @GetMapping("/members/{memberId}/penalties/pending")
+    public ResponseEntity<List<com.infy.lms.dto.PenaltyDTO>> getMemberPendingPenalties(@PathVariable Long memberId) {
+        List<com.infy.lms.dto.PenaltyDTO> list = borrowService.getPendingPenaltiesForMember(memberId);
+        return ResponseEntity.ok(list);
+    }
+
+    // Admin/Librarian: list all pending penalties
+    @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN')")
+    @GetMapping("/penalties/pending")
+    public ResponseEntity<List<com.infy.lms.dto.PenaltyDTO>> getAllPendingPenalties() {
+        List<com.infy.lms.dto.PenaltyDTO> list = borrowService.getAllPendingPenalties();
+        return ResponseEntity.ok(list);
+    }
+
+    // Admin/Librarian: list all penalties (pending, paid, waived)
+    @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN')")
+    @GetMapping("/penalties")
+    public ResponseEntity<List<com.infy.lms.dto.PenaltyDTO>> getAllPenalties() {
+        List<com.infy.lms.dto.PenaltyDTO> list = borrowService.getAllPenalties();
+        return ResponseEntity.ok(list);
+    }
+
+
+
+    // Pay a penalty (student can pay their own; admin/librarian can pay any)
+    @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN') or hasRole('STUDENT')")
+    @PostMapping("/borrow/{borrowRecordId}/pay")
+    public ResponseEntity<Map<String, String>> payPenaltyEndpoint(@PathVariable Long borrowRecordId,
+                                                                  @RequestBody com.infy.lms.dto.PaymentRequestDTO payment) {
+        try {
+            System.out.println("🔍 PAYMENT CONTROLLER: Processing payment for borrowRecordId=" + borrowRecordId);
+            System.out.println("   Payment amount: " + payment.getAmount());
+
+            // Validate ownership for students (admins/librarians can pay any penalty)
+            BorrowRecord record = borrowRepo.findById(borrowRecordId)
+                    .orElseThrow(() -> new BorrowException("Borrow record not found"));
+
+            System.out.println("   Found borrow record:");
+            System.out.println("   Record ID: " + record.getId());
+            System.out.println("   Student ID: " + record.getStudent().getId());
+            System.out.println("   Penalty Amount: " + record.getPenaltyAmount());
+            System.out.println("   Penalty Status: " + record.getPenaltyStatus());
+
+            // For students, ensure they own this penalty
+            if (!securityService.hasAnyRole("LIBRARIAN", "ADMIN")) {
+                Long currentUserId = securityService.getCurrentUserId();
+                System.out.println("   Current user ID: " + currentUserId);
+                System.out.println("   Record belongs to student ID: " + record.getStudent().getId());
+
+                if (!record.getStudent().getId().equals(currentUserId)) {
+                    System.out.println("   ❌ OWNERSHIP CHECK FAILED: Student " + currentUserId + " trying to pay penalty for student " + record.getStudent().getId());
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(Map.of("message", "You can only pay your own penalties"));
+                }
+                System.out.println("   ✅ OWNERSHIP CHECK PASSED");
+            } else {
+                System.out.println("   ✅ ADMIN/LIBRARIAN ACCESS - No ownership check needed");
+            }
+
+            String res = borrowService.payPenalty(borrowRecordId, payment.getAmount());
+            System.out.println("   ✅ PAYMENT SUCCESSFUL: " + res);
+            return ResponseEntity.ok(Map.of("message", res));
+        } catch (Exception ex) {
+            System.err.println("   ❌ PAYMENT ERROR: " + ex.getMessage());
+            ex.printStackTrace();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    // Waive a penalty (admin/librarian only)
+    @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN')")
+    @PostMapping("/borrow/{borrowRecordId}/waive")
+    public ResponseEntity<Map<String, String>> waivePenaltyEndpoint(@PathVariable Long borrowRecordId) {
+        System.out.println("🔍 CONTROLLER: Waive penalty request for ID: " + borrowRecordId);
+        try {
+            String res = borrowService.waivePenalty(borrowRecordId);
+            System.out.println("✅ CONTROLLER: Waive penalty successful: " + res);
+            return ResponseEntity.ok(Map.of("message", res));
+        } catch (Exception ex) {
+            System.out.println("❌ CONTROLLER: Waive penalty failed: " + ex.getMessage());
+            ex.printStackTrace();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    // Mark penalty as paid (admin/librarian only)
+    @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN')")
+    @PostMapping("/borrow/{borrowRecordId}/mark-paid")
+    public ResponseEntity<Map<String, String>> markPenaltyAsPaidEndpoint(@PathVariable Long borrowRecordId) {
+        try {
+            BorrowRecord record = borrowRepo.findById(borrowRecordId)
+                    .orElseThrow(() -> new BorrowException("Borrow record not found"));
+
+            BigDecimal owed = record.getPenaltyAmount() == null ? BigDecimal.ZERO : record.getPenaltyAmount();
+
+            if (owed.compareTo(BigDecimal.ZERO) == 0) {
+                return ResponseEntity.badRequest().body(Map.of("message", "No penalty outstanding for this borrow record."));
+            }
+
+            // Mark as paid - keep original penalty amount for display
+            record.setPenaltyStatus(BorrowRecord.PenaltyStatus.PAID);
+            borrowRepo.save(record);
+
+            return ResponseEntity.ok(Map.of("message", "Penalty marked as paid successfully. Amount: " + owed.toPlainString()));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+}
