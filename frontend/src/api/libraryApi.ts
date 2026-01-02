@@ -127,6 +127,7 @@ export const rejectMembershipRequest = (id: number, reason?: string) =>
 /* Penalties */
 export const getMemberPenalties = (memberId: number) => client.get(`/api/members/${memberId}/penalties`);
 export const getAllPendingPenalties = () => client.get("/api/penalties/pending");
+export const getAllPenalties = () => client.get("/api/penalties");
 export const payPenalty = (borrowRecordId: number, amount: number) => client.post(`/api/borrow/${borrowRecordId}/pay`, { amount });
 export const waivePenalty = (borrowRecordId: number) => client.post(`/api/borrow/${borrowRecordId}/waive`);
 export const markPenaltyAsPaid = (borrowRecordId: number) => client.post(`/api/borrow/${borrowRecordId}/mark-paid`);
@@ -150,8 +151,17 @@ export const downloadReport = (type: string, format: 'csv' | 'excel' = 'csv', fi
 
 /* Recommendations */
 export const getRecommendations = (userId: number) => client.get(`/api/recommendations/${userId}`);
-export const getPopularBooksAnalytics = () => client.get("/api/recommendations/analytics/popular-books");
-export const getCategoryTrendsAnalytics = () => client.get("/api/recommendations/analytics/category-trends");
+export const getPopularBooksAnalytics = (params?: { since?: string; until?: string; membershipType?: string; department?: string; location?: string }) =>
+  client.get("/api/recommendations/analytics/popular-books", { params });
+
+export const getCategoryTrendsAnalytics = (params?: { since?: string; until?: string; membershipType?: string; department?: string; location?: string }) =>
+  client.get("/api/recommendations/analytics/category-trends", { params });
+
+export const getPopularBooksTimeSeries = (params?: { since?: string; until?: string; membershipType?: string; department?: string; location?: string }) =>
+  client.get("/api/recommendations/analytics/popular-books/timeseries", { params });
+
+export const exportPopularBooksAnalytics = (params?: { since?: string; until?: string; membershipType?: string; department?: string; location?: string }) =>
+  client.get("/api/recommendations/analytics/popular-books/export", { params, responseType: 'blob' });
 
 /* Waitlist APIs */
 export const joinWaitlist = (bookId: number) =>
@@ -168,5 +178,8 @@ export const getWaitlistPosition = (bookId: number) =>
 
 export const getBookWaitlist = (bookId: number) =>
   client.get(`/api/waitlist/book/${bookId}`);
+
+export const getAllWaitlists = () =>
+  client.get('/api/waitlist/all');
 
 /* Note: all responses are axios responses; callers should use `.data` or handle defensively */

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getIssueRequests, approveIssueRequest, rejectIssueRequest, bulkApproveRequests, getBookDetails } from '../../api/libraryApi';
 import type { IssueRequest } from '../../types/dto';
 
@@ -9,13 +9,13 @@ const Requests: React.FC = () => {
   const [selectedRequests, setSelectedRequests] = useState<Set<number>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>('PENDING');
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<string>('id');
-  const [sortOrder, setSortOrder] = useState<string>('asc');
+  const [sortBy] = useState<string>('id');
+  const [sortOrder] = useState<string>('asc');
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<IssueRequest | null>(null);
-  const [selectedBook, setSelectedBook] = useState<any>(null);
+  const [selectedBook, setSelectedBook] = useState<{ id: number; title: string; author: string; availableCopies: number } | null>(null);
   const [processingRequests, setProcessingRequests] = useState<Set<number>>(new Set());
 
   // Pagination state
@@ -29,19 +29,7 @@ const Requests: React.FC = () => {
   const [rejectReason, setRejectReason] = useState('');
   const [dueDateOverride, setDueDateOverride] = useState('');
 
-  useEffect(() => {
-    loadRequests();
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(loadRequests, 30000);
-    return () => clearInterval(interval);
-  }, [statusFilter]);
-
-  // Reset to first page when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [statusFilter, searchTerm]);
-
-  const loadRequests = async () => {
+  const loadRequests = useCallback(async () => {
     try {
       setLoading(true);
       const response = await getIssueRequests(undefined);  // Always fetch all requests for stats
@@ -60,7 +48,19 @@ const Requests: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
+
+  useEffect(() => {
+    loadRequests();
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(loadRequests, 30000);
+    return () => clearInterval(interval);
+  }, [statusFilter, loadRequests]);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, searchTerm]);
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToastMessage({ type, message });
@@ -144,7 +144,7 @@ const Requests: React.FC = () => {
             REJECTED
           </span>
         );
-      
+
       default:
         return (
           <span
@@ -167,14 +167,15 @@ const Requests: React.FC = () => {
   // Filtering and sorting
   const filteredAndSortedRequests = requests
     .filter((request) => {
-      const lowerSearch = searchTerm.toLowerCase();
-      const searchMatch =
-        !searchTerm ||
-        request.bookTitle?.toLowerCase().includes(lowerSearch) ||
-        request.studentName?.toLowerCase().includes(lowerSearch) ||
-        request.id.toString().includes(lowerSearch);
+      if (!searchTerm.trim()) return true;
 
-      return searchMatch;
+      const searchLower = searchTerm.toLowerCase().trim();
+      return (
+        request.bookTitle?.toLowerCase().includes(searchLower) ||
+        request.bookAuthor?.toLowerCase().includes(searchLower) ||
+        request.studentName?.toLowerCase().includes(searchLower) ||
+        request.id.toString().includes(searchLower)
+      );
     })
     .sort((a, b) => {
       let aValue: string | Date, bValue: string | Date;
@@ -285,17 +286,18 @@ const Requests: React.FC = () => {
       setShowApproveModal(false);
       setSelectedRequest(null);
       loadRequests();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('processApprove error:', error);
 
-      const serverMessage = error?.response?.data?.message || error?.response?.data?.error || null;
+      const err = error as { response?: { data?: { message?: string; error?: string } }; message?: string };
+      const serverMessage = err?.response?.data?.message || err?.response?.data?.error || null;
       if (serverMessage && serverMessage.includes('OutOfStock')) {
         showToast('error', 'Cannot approve: Book out of stock');
       } else if (serverMessage) {
         // show backend message if present to help debugging
         showToast('error', `Failed to approve: ${serverMessage}`);
-      } else if (error?.message) {
-        showToast('error', `Failed to approve: ${error.message}`);
+      } else if (err?.message) {
+        showToast('error', `Failed to approve: ${err.message}`);
       } else {
         showToast('error', 'Failed to approve request');
       }
@@ -321,8 +323,8 @@ const Requests: React.FC = () => {
       setSelectedRequest(null);
       setRejectReason('');
       loadRequests();
-    } catch (error) {
-      showToast('error', 'Failed to reject request');
+    } catch {
+      console.error('Failed to reject request');
     } finally {
       setProcessingRequests(prev => {
         const newSet = new Set(prev);
@@ -341,7 +343,7 @@ const Requests: React.FC = () => {
 
       if (failedRequests.length > 0) {
         showToast('success', `${approvedCount} requests approved. ${failedRequests.length} failed due to conflicts.`);
-        setSelectedRequests(new Set(failedRequests.map((r: any) => r.id)));
+        setSelectedRequests(new Set(failedRequests.map((r: unknown) => (r as { id: number }).id)));
       } else {
         showToast('success', `${approvedCount} requests approved successfully!`);
         setSelectedRequests(new Set());
@@ -349,9 +351,9 @@ const Requests: React.FC = () => {
 
       setShowBulkModal(false);
       loadRequests();
-    } catch (error) {
-      showToast('error', 'Failed to bulk approve requests');
-    }
+      } catch {
+        console.error('Failed to bulk approve requests');
+      }
   };
 
   if (loading) {
@@ -647,7 +649,6 @@ const Requests: React.FC = () => {
                   }}>
                     Author
                   </th>
-
                   <th style={{
                     padding: '12px 8px',
                     textAlign: 'center',
@@ -668,18 +669,6 @@ const Requests: React.FC = () => {
                   }}>
                     Requested
                   </th>
-                  {statusFilter === 'PENDING' && (
-                    <th style={{
-                      padding: '12px 8px',
-                      textAlign: 'center',
-                      fontWeight: '700',
-                      color: '#2A1F16',
-                      fontSize: '0.85rem',
-                      width: '200px'
-                    }}>
-                      Actions
-                    </th>
-                  )}
                   <th style={{
                     padding: '12px 8px',
                     textAlign: 'center',
@@ -689,6 +678,16 @@ const Requests: React.FC = () => {
                     width: '100px'
                   }}>
                     Status
+                  </th>
+                  <th style={{
+                    padding: '12px 8px',
+                    textAlign: 'center',
+                    fontWeight: '700',
+                    color: '#2A1F16',
+                    fontSize: '0.85rem',
+                    width: '200px'
+                  }}>
+                    Actions
                   </th>
                 </tr>
               </thead>
@@ -847,6 +846,13 @@ const Requests: React.FC = () => {
                           </div>
                         </td>
                       )}
+                      {statusFilter !== 'PENDING' && (
+                        <td style={{ padding: '12px 8px', textAlign: 'center', minWidth: '200px' }}>
+                          <span style={{ color: "#6b7280", fontSize: "14px", fontWeight: "500" }}>
+                            Processed
+                          </span>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -907,7 +913,7 @@ const Requests: React.FC = () => {
           )}
 
           {/* Pagination */}
-          {filteredAndSortedRequests.length > itemsPerPage && (
+          {filteredAndSortedRequests.length > 0 && (
             <div
               style={{
                 background: '#f8f9fa',
@@ -1162,19 +1168,28 @@ const Requests: React.FC = () => {
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          zIndex: 1000
+          zIndex: 1000,
+          padding: '20px'
         }}>
           <div style={{
             background: 'white',
             borderRadius: '12px',
-            padding: '30px',
+            padding: '20px',
             maxWidth: '600px',
             width: '90%',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
+            maxHeight: '80vh',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+            display: 'flex',
+            flexDirection: 'column'
           }}>
-            <h3 style={{ textAlign: 'center', marginBottom: '20px' }}>⚡ Bulk Approve Issue Requests</h3>
+            <h3 style={{ textAlign: 'center', marginBottom: '20px', flexShrink: 0 }}>⚡ Bulk Approve Issue Requests</h3>
 
-            <div style={{ marginBottom: '20px' }}>
+            <div style={{
+              overflowY: 'auto',
+              flex: 1,
+              marginBottom: '20px',
+              minHeight: 0
+            }}>
               <div style={{ textAlign: 'center', marginBottom: '15px' }}>
                 <div style={{ fontSize: '3rem', marginBottom: '10px' }}>📚</div>
                 <h4 style={{ color: '#2A1F16' }}>Confirm Bulk Approval</h4>

@@ -62,4 +62,20 @@ public class SecurityService {
         Optional<com.infy.lms.model.User> u = userRepository.findByEmail(username);
         return u.map(com.infy.lms.model.User::getId).orElse(null);
     }
+
+    /**
+     * Check if the current user has any of the specified roles
+     */
+    public boolean hasAnyRole(String... roles) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) return false;
+
+        for (String role : roles) {
+            if (authentication.getAuthorities().stream()
+                    .anyMatch(authority -> authority.getAuthority().equals("ROLE_" + role))) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

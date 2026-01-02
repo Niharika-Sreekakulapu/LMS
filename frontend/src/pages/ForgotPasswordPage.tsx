@@ -3,7 +3,7 @@ import axios from "axios";
 import { forgotPassword } from "../api/authApi";
 // We will use a custom styled back button inside the layout to match the theme
 import { useNavigate } from "react-router-dom";
-import libImage from "../assets/lib.webp";
+import loginImage from "../assets/login.jpg";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -52,7 +52,7 @@ export default function ForgotPasswordPage() {
         /* LEFT SIDE: IMAGE */
         .fp-image-section {
           flex: 1;
-          background-image: url(${libImage});
+          background-image: url(${loginImage});
           background-size: cover;
           background-position: center;
           position: relative;

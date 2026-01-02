@@ -192,7 +192,7 @@ export default function UserManagement() {
           fontWeight: '700',
         }}
       >
-        👥 Member Management Dashboard
+        👥 Users Management Dashboard
       </h1>
 
       {/* Statistics Dashboard */}
@@ -224,7 +224,7 @@ export default function UserManagement() {
             {totalMembers}
           </div>
           <div style={{ fontSize: '0.85rem', opacity: 0.9 }}>
-            👥 Total Members
+            👥 Total Member Requests
           </div>
         </div>
 
@@ -464,8 +464,8 @@ export default function UserManagement() {
                   <th style={{ padding: '16px 8px', textAlign: 'left', fontWeight: '700', color: '#2A1F16', fontSize: '1.1rem', fontFamily: 'Arial, sans-serif' }}>Email</th>
                   <th style={{ padding: '16px 8px', textAlign: 'left', fontWeight: '700', color: '#2A1F16', fontSize: '1.1rem', fontFamily: 'Arial, sans-serif' }}>Role</th>
                   <th style={{ padding: '16px 8px', textAlign: 'center', fontWeight: '700', color: '#2A1F16', fontSize: '1.1rem', fontFamily: 'Arial, sans-serif' }}>Created</th>
+                  <th style={{ padding: '16px 8px', textAlign: 'center', fontWeight: '700', color: '#2A1F16', fontSize: '1.1rem', fontFamily: 'Arial, sans-serif' }}>Status</th>
                   <th style={{ padding: '16px 8px', textAlign: 'center', fontWeight: '700', color: '#2A1F16', fontSize: '1.1rem', fontFamily: 'Arial, sans-serif' }}>Actions</th>
-                  <th style={{ padding: '16px 8px', textAlign: 'left', fontWeight: '700', color: '#2A1F16', fontSize: '1.1rem', fontFamily: 'Arial, sans-serif' }}>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -476,6 +476,18 @@ export default function UserManagement() {
                     <td style={{ padding: 12, fontSize: '14px', fontWeight: 500, wordBreak: 'break-all', color: '#6c757d', fontFamily: 'Arial, sans-serif' }}>{u.email}</td>
                     <td style={{ padding: 12, fontSize: '14px', fontWeight: 500, color: '#6c757d', fontFamily: 'Arial, sans-serif' }}>{u.role}</td>
                     <td style={{ padding: 12, fontSize: '14px', fontWeight: 500, color: '#6c757d', textAlign: 'center', fontFamily: 'Arial, sans-serif' }}>{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A'}</td>
+                    <td style={{ padding: 12, fontSize: '14px', fontFamily: 'Arial, sans-serif', textAlign: 'center' }}>
+                      <span style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        background: getStatus(u) === 'APPROVED' ? '#d4edda' : getStatus(u) === 'PENDING' ? '#fff3cd' : '#f8d7da',
+                        color: getStatus(u) === 'APPROVED' ? '#155724' : getStatus(u) === 'PENDING' ? '#856404' : '#721c24'
+                      }}>
+                        {getStatus(u)}
+                      </span>
+                    </td>
                     <td style={{ padding: 12, whiteSpace: 'nowrap', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                       {u.status === 'PENDING' && (
                         <>
@@ -487,18 +499,6 @@ export default function UserManagement() {
                           </button>
                         </>
                       )}
-                    </td>
-                    <td style={{ padding: 12, fontSize: '14px', fontFamily: 'Arial, sans-serif' }}>
-                      <span style={{
-                        padding: '6px 12px',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        background: getStatus(u) === 'APPROVED' ? '#d4edda' : getStatus(u) === 'PENDING' ? '#fff3cd' : '#f8d7da',
-                        color: getStatus(u) === 'APPROVED' ? '#155724' : getStatus(u) === 'PENDING' ? '#856404' : '#721c24'
-                      }}>
-                        {getStatus(u)}
-                      </span>
                     </td>
                   </tr>
                 ))}
@@ -552,7 +552,7 @@ export default function UserManagement() {
       )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {totalPages > 0 && (
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',

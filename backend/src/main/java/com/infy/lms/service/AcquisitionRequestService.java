@@ -190,9 +190,43 @@ public class AcquisitionRequestService {
         studentOpt.ifPresent(student -> {
             String to = student.getEmail();
             String subject = "Your book request has been approved";
-            String body = String.format("Hi %s,\n\nYour request for '%s' has been approved and added to the library (book id: %d).\n\nRegards,\nLibrary",
-                    student.getName() == null ? "" : student.getName(), ar.getBookName(), finalBook.getId());
-            emailService.sendEmail(to, subject, body);
+            String htmlBody = "<html><head><style>" +
+                    "body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f9f9f9; }" +
+                    ".container { max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; }" +
+                    ".header { background: linear-gradient(135deg, #28a745, #20c997); color: white; padding: 30px 40px; text-align: center; }" +
+                    ".header h1 { margin: 0; font-size: 28px; font-weight: 700; }" +
+                    ".content { padding: 40px; }" +
+                    ".content h2 { color: #28a745; margin-top: 0; font-size: 24px; }" +
+                    ".content p { line-height: 1.6; color: #555; margin: 15px 0; }" +
+                    ".highlight { background: #e8f5e8; border-left: 4px solid #28a745; padding: 15px; margin: 20px 0; border-radius: 4px; }" +
+                    ".footer { background: #f8f9fa; padding: 20px 40px; text-align: center; color: #666; font-size: 14px; border-top: 1px solid #e9ecef; }" +
+                    ".footer p { margin: 5px 0; }" +
+                    "</style></head><body>" +
+                    "<div class='container'>" +
+                    "<div class='header'>" +
+                    "<h1>🎉 Good News!</h1>" +
+                    "</div>" +
+                    "<div class='content'>" +
+                    "<h2>Your Book Request Has Been Approved!</h2>" +
+                    "<p>Dear " + (student.getName() == null ? "Valued Student" : student.getName()) + ",</p>" +
+                    "<p>We're excited to inform you that your acquisition request has been <strong style='color: #28a745;'>APPROVED</strong>!</p>" +
+                    "<div class='highlight'>" +
+                    "<strong>📖 Book Details:</strong><br>" +
+                    "Title: <strong>" + ar.getBookName() + "</strong><br>" +
+                    "Author: <strong>" + (ar.getAuthor() != null ? ar.getAuthor() : "N/A") + "</strong><br>" +
+                    "Book ID: <strong>" + finalBook.getId() + "</strong>" +
+                    "</div>" +
+                    "<p>The book has been added to our library collection and is now available for you to borrow. You can request this book from our catalog whenever you'd like.</p>" +
+                    "<p style='margin-top: 25px;'><strong>Happy Reading!</strong></p>" +
+                    "<p>Best regards,<br><strong>Library Management Team</strong></p>" +
+                    "</div>" +
+                    "<div class='footer'>" +
+                    "<p><strong>Library Management System</strong></p>" +
+                    "<p>This is an automated notification • Please do not reply to this email</p>" +
+                    "<p>© 2025 Library Management System. All rights reserved.</p>" +
+                    "</div>" +
+                    "</div></body></html>";
+            emailService.sendEmail(to, subject, htmlBody);
         });
 
         return toDto(ar);
@@ -217,9 +251,48 @@ public class AcquisitionRequestService {
         userRepo.findById(ar.getStudentId()).ifPresent(student -> {
             String to = student.getEmail();
             String subject = "Your book request was rejected";
-            String body = String.format("Hi %s,\n\nYour request for '%s' was rejected by the librarian/admin.\nReason: %s\n\nRegards,\nLibrary",
-                    student.getName() == null ? "" : student.getName(), ar.getBookName(), reason == null ? "No reason provided" : reason);
-            emailService.sendEmail(to, subject, body);
+            String htmlBody = "<html><head><style>" +
+                    "body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f9f9f9; }" +
+                    ".container { max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; }" +
+                    ".header { background: linear-gradient(135deg, #dc3545, #c82333); color: white; padding: 30px 40px; text-align: center; }" +
+                    ".header h1 { margin: 0; font-size: 28px; font-weight: 700; }" +
+                    ".content { padding: 40px; }" +
+                    ".content h2 { color: #dc3545; margin-top: 0; font-size: 24px; }" +
+                    ".content p { line-height: 1.6; color: #555; margin: 15px 0; }" +
+                    ".highlight { background: #ffebee; border-left: 4px solid #dc3545; padding: 15px; margin: 20px 0; border-radius: 4px; }" +
+                    ".reason { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; margin: 20px 0; border-radius: 4px; }" +
+                    ".footer { background: #f8f9fa; padding: 20px 40px; text-align: center; color: #666; font-size: 14px; border-top: 1px solid #e9ecef; }" +
+                    ".footer p { margin: 5px 0; }" +
+                    "</style></head><body>" +
+                    "<div class='container'>" +
+                    "<div class='header'>" +
+                    "<h1>📋 Request Update</h1>" +
+                    "</div>" +
+                    "<div class='content'>" +
+                    "<h2>Your Book Request Has Been Reviewed</h2>" +
+                    "<p>Dear " + (student.getName() == null ? "Valued Student" : student.getName()) + ",</p>" +
+                    "<p>After careful consideration, your acquisition request has been <strong style='color: #dc3545;'>REJECTED</strong>.</p>" +
+                    "<div class='highlight'>" +
+                    "<strong>📖 Book Details:</strong><br>" +
+                    "Title: <strong>" + ar.getBookName() + "</strong><br>" +
+                    "Author: <strong>" + (ar.getAuthor() != null ? ar.getAuthor() : "N/A") + "</strong>" +
+                    "</div>" +
+                    "<div class='reason'>" +
+                    "<strong>Reason for Rejection:</strong><br>" +
+                    (reason == null || reason.trim().isEmpty() ? "No specific reason provided by the reviewer." : reason) +
+                    "</div>" +
+                    "<p>We understand this may be disappointing. You can submit a new request with different justification or try requesting a different book that may be more suitable for our collection.</p>" +
+                    "<p>If you have questions about this decision, please contact library staff for more information.</p>" +
+                    "<p>Thank you for your interest in expanding our library collection.</p>" +
+                    "<p>Best regards,<br><strong>Library Management Team</strong></p>" +
+                    "</div>" +
+                    "<div class='footer'>" +
+                    "<p><strong>Library Management System</strong></p>" +
+                    "<p>This is an automated notification • Please do not reply to this email</p>" +
+                    "<p>© 2025 Library Management System. All rights reserved.</p>" +
+                    "</div>" +
+                    "</div></body></html>";
+            emailService.sendEmail(to, subject, htmlBody);
         });
 
         return toDto(ar);

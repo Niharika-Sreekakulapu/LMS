@@ -63,6 +63,12 @@ public interface BorrowService {
      */
     void sendDueDateAlerts();
 
+    /**
+     * Send low stock alert notifications for books with 2 or fewer available copies (intended to be called from a scheduler).
+     * Should find all books with low stock and send email notifications to administrators.
+     */
+    void sendLowStockAlerts();
+
     // --- Penalty / payment API ---
     /**
      * List pending penalties for a specific member.
@@ -78,6 +84,11 @@ public interface BorrowService {
      * List all pending penalties (admin/librarian use).
      */
     List<com.infy.lms.dto.PenaltyDTO> getAllPendingPenalties();
+
+    /**
+     * List all penalties (pending, paid, waived) for admin/librarian use.
+     */
+    List<com.infy.lms.dto.PenaltyDTO> getAllPenalties();
 
     /**
      * Pay (full or partial) penalty for a borrow record.

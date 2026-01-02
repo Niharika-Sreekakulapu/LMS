@@ -5,6 +5,7 @@ import com.infy.lms.dto.BorrowRequestDTO;
 import com.infy.lms.dto.PenaltyDTO;
 import com.infy.lms.dto.ReturnRequestDTO;
 import com.infy.lms.enums.BorrowStatus;
+import com.infy.lms.enums.Role;
 import com.infy.lms.exception.BorrowException;
 import com.infy.lms.exception.OutOfStockException;
 import com.infy.lms.model.Book;
@@ -15,6 +16,7 @@ import com.infy.lms.repository.BorrowRecordRepository;
 import com.infy.lms.repository.UserRepository;
 import com.infy.lms.service.BorrowService;
 import com.infy.lms.service.EmailService;
+import com.infy.lms.service.WaitlistService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -23,6 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -46,6 +50,7 @@ public class BorrowServiceImpl implements BorrowService {
     private final BookRepository bookRepo;
     private final UserRepository userRepo;
     private final EmailService emailService;
+    private final WaitlistService waitlistService;
 
     @Value("${lms.default-loan-days:14}")
     private long defaultLoanDays;
@@ -180,10 +185,12 @@ public class BorrowServiceImpl implements BorrowService {
             }
         }
 
-        // Calculate days late
+        // Calculate days late using calendar days
         long daysLate = 0;
         if (returnedAt.isAfter(record.getDueDate())) {
-            daysLate = Duration.between(record.getDueDate(), returnedAt).toDays();
+            LocalDate returnLocalDate = returnedAt.atZone(ZoneId.systemDefault()).toLocalDate();
+            LocalDate dueLocalDate = record.getDueDate().atZone(ZoneId.systemDefault()).toLocalDate();
+            daysLate = ChronoUnit.DAYS.between(dueLocalDate, returnLocalDate);
             if (daysLate < 0) daysLate = 0;
         }
 
@@ -193,18 +200,24 @@ public class BorrowServiceImpl implements BorrowService {
             System.out.println("🔍 LATE PENALTY: Book MRP = " + book.getMrp() + ", Days Late = " + daysLate + ", Book Title = '" + book.getTitle() + "'");
 
             BigDecimal mrp = BigDecimal.valueOf(book.getMrp() != null ? book.getMrp().doubleValue() : 0.0);
-            BigDecimal penaltyPerDay = mrp.multiply(BigDecimal.valueOf(0.1)).setScale(2, BigDecimal.ROUND_HALF_UP);
-            BigDecimal latePenalty = penaltyPerDay.multiply(BigDecimal.valueOf(daysLate)).setScale(2, BigDecimal.ROUND_HALF_UP);
-            totalPenalty = totalPenalty.add(latePenalty);
+            System.out.println("🔍 LATE PENALTY: MRP BigDecimal = " + mrp);
 
-            System.out.println("💰 LATE PENALTY: ₹" + penaltyPerDay + " per day × " + daysLate + " days = ₹" + latePenalty);
+            if (mrp.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal penaltyPerDay = mrp.multiply(BigDecimal.valueOf(0.1)).setScale(2, BigDecimal.ROUND_HALF_UP);
+                BigDecimal latePenalty = penaltyPerDay.multiply(BigDecimal.valueOf(daysLate)).setScale(2, BigDecimal.ROUND_HALF_UP);
+                totalPenalty = totalPenalty.add(latePenalty);
 
-            // Determine primary penalty type (prioritize damage/lost over late)
-            if (!hasDamageOrLossPenalty) {
-                primaryPenaltyType = BorrowRecord.PenaltyType.LATE;
+                System.out.println("💰 LATE PENALTY: ₹" + penaltyPerDay + " per day × " + daysLate + " days = ₹" + latePenalty);
+
+                // Determine primary penalty type (prioritize damage/lost over late)
+                if (!hasDamageOrLossPenalty) {
+                    primaryPenaltyType = BorrowRecord.PenaltyType.LATE;
+                }
+
+                System.out.println("💰 LATE RESULT: Type=" + primaryPenaltyType + ", Amount=₹" + totalPenalty + ", Status=PENDING");
+            } else {
+                System.out.println("⚠️ LATE PENALTY: Book has no MRP value or MRP is 0 - no late penalty applied");
             }
-
-            System.out.println("💰 LATE RESULT: Type=" + primaryPenaltyType + ", Amount=₹" + totalPenalty + ", Status=PENDING");
         } else {
             System.out.println("✅ ON TIME RETURN: No late penalty for book '" + book.getTitle() + "'");
         }
@@ -244,6 +257,33 @@ public class BorrowServiceImpl implements BorrowService {
         int available = fresh.getAvailableCopies() == null ? 0 : fresh.getAvailableCopies();
         fresh.setIssuedCopies(Math.max(0, total - available));
         bookRepo.save(fresh);
+
+        // Handle book allocation for returned books (only if not lost)
+        if (!reportedLost) {
+            // Check for pending book requests first before allocating to waitlist
+            // TODO: Implement pending request check
+
+            // For now, prioritize waitlist allocation
+            User waitlistStudent = waitlistService.handleBookReturn(fresh);
+            if (waitlistStudent != null) {
+            // Immediately issue the book to the waitlist student
+            BorrowRequestDTO borrowRequest = new BorrowRequestDTO(
+                    waitlistStudent.getId(),
+                    fresh.getId(),
+                    Instant.now(),
+                    Instant.now().plus(Duration.ofDays(defaultLoanDays))
+            );
+
+                try {
+                    borrowBook(borrowRequest);
+                    System.out.println("✅ BOOK ISSUED: Book '" + fresh.getTitle() +
+                                     "' automatically issued to waitlist student '" +
+                                     waitlistStudent.getName() + "'");
+                } catch (Exception e) {
+                    System.out.println("❌ BOOK ISSUE FAILED: Could not issue book to waitlist student: " + e.getMessage());
+                }
+            }
+        }
 
         notifyReturn(record);
 
@@ -289,7 +329,7 @@ public class BorrowServiceImpl implements BorrowService {
                 .filter(br -> status == null || br.getStatus() == null || br.getStatus().name().equalsIgnoreCase(status))
                 .filter(br -> {
                     if (overdue == null) return true;
-                    boolean isOverdue = br.getReturnedAt() == null && br.getDueDate() != null && now.isAfter(br.getDueDate());
+                    boolean isOverdue = br.isOverdue();
                     return overdue ? isOverdue : !isOverdue;
                 })
                 .map(this::toHistoryDto)
@@ -299,7 +339,9 @@ public class BorrowServiceImpl implements BorrowService {
     @Override
     @Transactional
     public List<BorrowHistoryDTO> getOverdueBorrows(Long studentId) {
+        // Use current time to detect overdue books accurately
         Instant now = Instant.now();
+
         List<BorrowRecord> overdue;
         if (studentId == null) {
             overdue = borrowRepo.findOverdue(now);
@@ -334,9 +376,8 @@ public class BorrowServiceImpl implements BorrowService {
         BigDecimal penaltyPerDay = mrp.multiply(BigDecimal.valueOf(0.1)).setScale(2, BigDecimal.ROUND_HALF_UP);
 
         // only compute if still outstanding or if returned but penalty not set
-        if (record.getReturnedAt() == null && record.getDueDate() != null && Instant.now().isAfter(record.getDueDate())) {
-            long daysLate = Duration.between(record.getDueDate(), Instant.now()).toDays();
-            if (daysLate < 0) daysLate = 0;
+        if (record.isOverdue()) {
+            long daysLate = record.daysOverdue();
             BigDecimal totalPenalty = penaltyPerDay.multiply(BigDecimal.valueOf(daysLate)).setScale(2, BigDecimal.ROUND_HALF_UP);
             record.setPenaltyAmount(daysLate > 0 ? totalPenalty : BigDecimal.ZERO);
             record.setPenaltyType(daysLate > 0 ? BorrowRecord.PenaltyType.LATE : BorrowRecord.PenaltyType.NONE);
@@ -434,6 +475,43 @@ public class BorrowServiceImpl implements BorrowService {
         List<BorrowRecord> allRecords = borrowRepo.findAll();
         System.out.println("🔍 getAllPendingPenalties: Found " + allRecords.size() + " total borrow records");
 
+        // First, calculate penalties for active overdue books that don't have them yet
+        for (BorrowRecord record : allRecords) {
+            if (record.isOverdue()) {
+                // Check if penalty is already calculated
+                boolean hasPenalty = record.getPenaltyAmount() != null && record.getPenaltyAmount().compareTo(BigDecimal.ZERO) > 0;
+                if (!hasPenalty) {
+                    // Calculate penalty for this overdue book
+                    Book book = record.getBook();
+                    BigDecimal mrp = BigDecimal.valueOf(book.getMrp() != null ? book.getMrp().doubleValue() : 0.0);
+                    BigDecimal penaltyPerDay = mrp.multiply(BigDecimal.valueOf(0.1)).setScale(2, BigDecimal.ROUND_HALF_UP);
+
+                    long daysLate = record.daysOverdue();
+                    if (daysLate > 0) {
+                        BigDecimal totalPenalty = penaltyPerDay.multiply(BigDecimal.valueOf(daysLate)).setScale(2, BigDecimal.ROUND_HALF_UP);
+                        record.setPenaltyAmount(totalPenalty);
+                        record.setPenaltyType(BorrowRecord.PenaltyType.LATE);
+                        record.setPenaltyStatus(BorrowRecord.PenaltyStatus.PENDING);
+                        record.setStatus(BorrowStatus.OVERDUE);
+                        borrowRepo.save(record);
+                        System.out.println("💰 Calculated penalty for overdue book: ID=" + record.getId() +
+                                         ", Days late=" + daysLate + ", Amount=₹" + totalPenalty +
+                                         ", Book MRP=₹" + (book.getMrp() != null ? book.getMrp() : 0));
+                    } else {
+                        // Clear any incorrect penalty flags for books that are not actually overdue
+                        record.setPenaltyAmount(BigDecimal.ZERO);
+                        record.setPenaltyType(BorrowRecord.PenaltyType.NONE);
+                        record.setPenaltyStatus(BorrowRecord.PenaltyStatus.NONE);
+                        if (record.getStatus() == BorrowStatus.OVERDUE) {
+                            record.setStatus(BorrowStatus.BORROWED);
+                        }
+                        borrowRepo.save(record);
+                        System.out.println("🧹 Cleared penalty flags for non-overdue book: ID=" + record.getId());
+                    }
+                }
+            }
+        }
+
         List<com.infy.lms.dto.PenaltyDTO> pendingPenalties = allRecords.stream()
                 .filter(r -> {
                     boolean hasPenalty = r.getPenaltyAmount() != null && r.getPenaltyAmount().compareTo(java.math.BigDecimal.ZERO) > 0;
@@ -453,6 +531,23 @@ public class BorrowServiceImpl implements BorrowService {
 
         System.out.println("✅ getAllPendingPenalties: Returning " + pendingPenalties.size() + " pending penalties");
         return pendingPenalties;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<com.infy.lms.dto.PenaltyDTO> getAllPenalties() {
+        List<BorrowRecord> allRecords = borrowRepo.findAll();
+        System.out.println("🔍 getAllPenalties: Found " + allRecords.size() + " total borrow records");
+
+        List<com.infy.lms.dto.PenaltyDTO> allPenalties = allRecords.stream()
+                .filter(r -> r.getPenaltyType() != BorrowRecord.PenaltyType.NONE &&
+                             r.getPenaltyStatus() != BorrowRecord.PenaltyStatus.NONE &&
+                             r.getReturnedAt() != null) // Only penalties for books that have been returned
+                .map(this::toPenaltyDto)
+                .collect(Collectors.toList());
+
+        System.out.println("✅ getAllPenalties: Returning " + allPenalties.size() + " total penalties for returned books");
+        return allPenalties;
     }
 
     @Override
@@ -479,18 +574,108 @@ public class BorrowServiceImpl implements BorrowService {
             // Keep penaltyType to show what kind of penalty was paid
             borrowRepo.save(record);
 
-            // notify user if possible
-            userRepo.findById(record.getStudent().getId()).ifPresent(student -> {
-                try {
-                    String to = student.getEmail();
-                    String subject = "Penalty payment received";
-                    StringBuilder body = new StringBuilder();
-                    body.append("Hi ").append(student.getName() == null ? "" : student.getName()).append(",\n\n");
-                    body.append("We have received your penalty payment of ").append(amount.toString()).append(" for the book '")
-                            .append(record.getBook().getTitle()).append("'. Your penalty is now cleared.\n\nRegards,\nLibrary");
-                    emailService.sendEmail(to, subject, body.toString());
-                } catch (Exception ignored) {}
-            });
+        // notify user if possible
+        userRepo.findById(record.getStudent().getId()).ifPresent(student -> {
+            try {
+                String to = student.getEmail();
+                String subject = "Penalty Payment Received - Payment Confirmed";
+                String studentName = student.getName() != null && !student.getName().trim().isEmpty() ? student.getName() : "Valued Member";
+                String bookTitle = record.getBook().getTitle() != null ? record.getBook().getTitle() : "Library Book";
+                String bookAuthor = record.getBook().getAuthor() != null ? record.getBook().getAuthor() : "Unknown Author";
+                String paymentAmount = "₹" + amount.toPlainString();
+                String paymentDate = java.time.format.DateTimeFormatter.ofPattern("MMMM dd, yyyy 'at' HH:mm")
+                        .format(java.time.LocalDateTime.now());
+
+                String htmlBody = String.format(
+                    """
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <title>Penalty Payment Confirmed</title>
+                        <style>
+                            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #f9f9f9; }
+                            .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+                            .header { background: linear-gradient(135deg, #28a745 0%%, #20c997 100%%); color: white; padding: 30px 20px; text-align: center; }
+                            .content { padding: 30px 20px; }
+                            .success-card { background: #d4edda; border-left: 4px solid #28a745; padding: 20px; margin: 20px 0; border-radius: 8px; color: #155724; }
+                            .book-card { background: #f8f9fa; border-left: 4px solid #28a745; padding: 15px; margin: 20px 0; border-radius: 8px; }
+                            .payment-summary { background: linear-gradient(135deg, #e8f5e8 0%%, #f0f8f0 100%%); padding: 20px; margin: 20px 0; border-radius: 8px; border: 2px solid #28a745; text-align: center; }
+                            .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; border-top: 1px solid #e9ecef; }
+                            h1 { margin: 0; font-size: 28px; }
+                            h2 { color: #28a745; margin-top: 0; }
+                            h3 { color: #155724; margin: 0 0 10px 0; }
+                            p { line-height: 1.6; }
+                            .highlight { color: #28a745; font-weight: 600; }
+                            .payment-amount { font-size: 32px; font-weight: 700; color: #28a745; margin: 10px 0; }
+                            .checkmark { font-size: 48px; margin-bottom: 10px; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <div class="header">
+                                <h1>Payment Confirmed</h1>
+                                <p>Thank you for settling your library dues</p>
+                            </div>
+
+                            <div class="content">
+                                <p>Hello <span class="highlight">%s</span>,</p>
+
+                                <div class="success-card">
+                                    <div class="checkmark">✓</div>
+                                    <h3>Payment Successfully Processed!</h3>
+                                    <p>We have received and processed your penalty payment. Your account is now clear of outstanding dues.</p>
+                                </div>
+
+                                <div class="payment-summary">
+                                    <h2>Payment Details</h2>
+                                    <div class="payment-amount">%s</div>
+                                    <p><strong>Payment Date:</strong> %s</p>
+                                    <p><strong>Status:</strong> <span style="color: #28a745; font-weight: 600;">FULLY PAID</span></p>
+                                </div>
+
+                                <div class="book-card">
+                                    <h2>Related Book Information</h2>
+                                    <p><strong>Book Title:</strong> %s</p>
+                                    <p><strong>Author:</strong> %s</p>
+                                    <p><strong>Penalty Status:</strong> <span style="color: #28a745; font-weight: 600;">CLEARED</span></p>
+                                </div>
+
+                                <p>Thank you for your prompt payment and continued commitment to our library community. We appreciate your responsibility in maintaining your borrowing privileges.</p>
+
+                                <p>If you have any questions about this payment or your account status, please don't hesitate to contact our library staff.</p>
+
+                                <p>Happy reading!</p>
+
+                                <p>Best regards,<br>
+                                <strong>Library Management System</strong></p>
+                            </div>
+
+                            <div class="footer">
+                                <p><strong>Library Management System</strong></p>
+                                <p>Contact us at support@lms.edu | Visit us at library@lms.edu</p>
+                                <p>Payment processed on %s</p>
+                                <p>© 2025 Library Management System. All rights reserved.</p>
+                            </div>
+                        </div>
+                    </body>
+                    </html>
+                    """,
+                    studentName,
+                    paymentAmount,
+                    paymentDate,
+                    bookTitle,
+                    bookAuthor,
+                    paymentDate
+                );
+
+                emailService.sendEmail(to, subject, htmlBody);
+            } catch (Exception e) {
+                System.err.println("Failed to send payment confirmation email: " + e.getMessage());
+                e.printStackTrace();
+            }
+        });
 
             return "Penalty paid in full. Thank you.";
         } else {
@@ -502,13 +687,112 @@ public class BorrowServiceImpl implements BorrowService {
             userRepo.findById(record.getStudent().getId()).ifPresent(student -> {
                 try {
                     String to = student.getEmail();
-                    String subject = "Partial penalty payment received";
-                    StringBuilder body = new StringBuilder();
-                    body.append("Hi ").append(student.getName() == null ? "" : student.getName()).append(",\n\n");
-                    body.append("We have received a partial penalty payment of ").append(amount.toString())
-                            .append(" for the book '").append(record.getBook().getTitle()).append("'. Remaining penalty: ")
-                            .append(remaining.toString()).append(".\n\nRegards,\nLibrary");
-                    emailService.sendEmail(to, subject, body.toString());
+                    String subject = "💰 Partial Penalty Payment Received - Payment Update";
+                    String studentName = student.getName() != null && !student.getName().trim().isEmpty() ? student.getName() : "Valued Member";
+                    String bookTitle = record.getBook().getTitle() != null ? record.getBook().getTitle() : "Library Book";
+                    String bookAuthor = record.getBook().getAuthor() != null ? record.getBook().getAuthor() : "Unknown Author";
+                    String paymentAmount = "₹" + amount.toPlainString();
+                    String remainingAmount = "₹" + remaining.toPlainString();
+                    String totalPenalty = "₹" + penalty.toPlainString();
+                    String paymentDate = java.time.format.DateTimeFormatter.ofPattern("MMMM dd, yyyy 'at' HH:mm")
+                            .format(java.time.LocalDateTime.now());
+
+                    String htmlBody = String.format(
+                        """
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="UTF-8">
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                            <title>Partial Payment Received</title>
+                            <style>
+                                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #f9f9f9; }
+                                .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+                                .header { background: linear-gradient(135deg, #ffc107 0%, #ff8c00 100%); color: white; padding: 30px 20px; text-align: center; }
+                                .content { padding: 30px 20px; }
+                                .progress-card { background: linear-gradient(135deg, #fff3cd 0%, #ffecb3 100%); border-left: 4px solid #ffc107; padding: 20px; margin: 20px 0; border-radius: 8px; color: #856404; }
+                                .book-card { background: #f8f9fa; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 8px; }
+                                .payment-summary { background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); padding: 20px; margin: 20px 0; border-radius: 8px; border: 2px solid #2196f3; text-align: center; }
+                                .warning-card { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 8px; color: #856404; }
+                                .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; border-top: 1px solid #e9ecef; }
+                                h1 { margin: 0; font-size: 28px; }
+                                h2 { color: #856404; margin-top: 0; }
+                                h3 { color: #0d47a1; margin: 0 0 10px 0; }
+                                p { line-height: 1.6; }
+                                .highlight { color: #0d47a1; font-weight: 600; }
+                                .payment-amount { font-size: 28px; font-weight: 700; color: #1976d2; margin: 10px 0; }
+                                .remaining-amount { font-size: 24px; font-weight: 700; color: #f57c00; margin: 10px 0; }
+                                .progress-bar { background: #e0e0e0; border-radius: 10px; height: 10px; margin: 15px 0; overflow: hidden; }
+                                .progress-fill { background: linear-gradient(90deg, #4caf50, #66bb6a); height: 100%; border-radius: 10px; }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="container">
+                                <div class="header">
+                                    <h1>💰 Partial Payment Received</h1>
+                                    <p>Thank you for your payment towards library dues</p>
+                                </div>
+
+                                <div class="content">
+                                    <p>Hello <span class="highlight">%s</span>,</p>
+
+                                    <div class="progress-card">
+                                        <div style="font-size: 36px; margin-bottom: 10px;">⏳</div>
+                                        <h2>Payment Progress Update</h2>
+                                        <p>We have received your partial payment and applied it towards your outstanding penalty. Your account is being updated accordingly.</p>
+                                    </div>
+
+                                    <div class="payment-summary">
+                                        <h3>💳 Payment Details</h3>
+                                        <div class="payment-amount">%s Received</div>
+                                        <p><strong>Payment Date:</strong> %s</p>
+                                        <p><strong>Total Penalty:</strong> %s</p>
+                                        <p><strong>Remaining Balance:</strong></p>
+                                        <div class="remaining-amount">%s</div>
+                                    </div>
+
+                                    <div class="book-card">
+                                        <h2>📖 Related Book Information</h2>
+                                        <p><strong>Book Title:</strong> %s</p>
+                                        <p><strong>Author:</strong> %s</p>
+                                        <p><strong>Penalty Status:</strong> <span style="color: #f57c00; font-weight: 600;">PARTIALLY PAID</span></p>
+                                    </div>
+
+                                    <div class="warning-card">
+                                        <h2>⚠️ Outstanding Balance</h2>
+                                        <p>You still have an outstanding penalty balance that needs to be settled. Please complete your payment as soon as possible to avoid any restrictions on your library borrowing privileges.</p>
+                                        <p>You can make additional payments through your student dashboard or by visiting the library in person.</p>
+                                    </div>
+
+                                    <p>If you have any questions about your penalty balance or payment options, please contact our library staff immediately.</p>
+
+                                    <p>Thank you for your continued commitment to settling your library dues.</p>
+
+                                    <p>Best regards,<br>
+                                    <strong>Library Management System</strong></p>
+                                </div>
+
+                                <div class="footer">
+                                    <p><strong>Library Management System</strong></p>
+                                    <p>Contact us at support@lms.edu | Visit us at library@lms.edu</p>
+                                    <p>Payment processed on %s</p>
+                                    <p>© 2025 Library Management System. All rights reserved.</p>
+                                </div>
+                            </div>
+                        </body>
+                        </html>
+                        """,
+                        studentName,
+                        paymentAmount,
+                        paymentDate,
+                        totalPenalty,
+                        remainingAmount,
+                        bookTitle,
+                        bookAuthor,
+                        paymentDate
+                    ).trim();
+
+                    emailService.sendEmail(to, subject, htmlBody);
                 } catch (Exception ignored) {}
             });
 
@@ -537,12 +821,100 @@ public class BorrowServiceImpl implements BorrowService {
         userRepo.findById(record.getStudent().getId()).ifPresent(student -> {
             try {
                 String to = student.getEmail();
-                String subject = "Penalty waived";
-                StringBuilder body = new StringBuilder();
-                body.append("Hi ").append(student.getName() == null ? "" : student.getName()).append(",\n\n");
-                body.append("Your penalty of ").append(owed.toString()).append(" for the book '")
-                        .append(record.getBook().getTitle()).append("' has been waived.\n\nRegards,\nLibrary");
-                emailService.sendEmail(to, subject, body.toString());
+                String subject = "🎉 Penalty Waived - Good News from Library!";
+                String studentName = student.getName() != null && !student.getName().trim().isEmpty() ? student.getName() : "Valued Member";
+                String bookTitle = record.getBook().getTitle() != null ? record.getBook().getTitle() : "Library Book";
+                String bookAuthor = record.getBook().getAuthor() != null ? record.getBook().getAuthor() : "Unknown Author";
+                String waivedAmount = "₹" + owed.toPlainString();
+                String waiverDate = java.time.format.DateTimeFormatter.ofPattern("MMMM dd, yyyy 'at' HH:mm")
+                        .format(java.time.LocalDateTime.now());
+
+                String htmlBody = String.format(
+                    """
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <title>Penalty Waived</title>
+                        <style>
+                            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #f9f9f9; }
+                            .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+                            .header { background: linear-gradient(135deg, #9c27b0 0%, #ba68c8 100%); color: white; padding: 30px 20px; text-align: center; }
+                            .content { padding: 30px 20px; }
+                            .celebration-card { background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%); border-left: 4px solid #9c27b0; padding: 20px; margin: 20px 0; border-radius: 8px; color: #4a148c; text-align: center; }
+                            .book-card { background: #f8f9fa; border-left: 4px solid #9c27b0; padding: 15px; margin: 20px 0; border-radius: 8px; }
+                            .waiver-summary { background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%); padding: 20px; margin: 20px 0; border-radius: 8px; border: 2px solid #9c27b0; text-align: center; }
+                            .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; border-top: 1px solid #e9ecef; }
+                            h1 { margin: 0; font-size: 28px; }
+                            h2 { color: #6a1b9a; margin-top: 0; }
+                            h3 { color: #4a148c; margin: 0 0 10px 0; }
+                            p { line-height: 1.6; }
+                            .highlight { color: #6a1b9a; font-weight: 600; }
+                            .waived-amount { font-size: 32px; font-weight: 700; color: #9c27b0; margin: 10px 0; }
+                            .celebration-emoji { font-size: 48px; margin-bottom: 15px; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <div class="header">
+                                <h1>🎉 Penalty Waived</h1>
+                                <p>Great news from your library!</p>
+                            </div>
+
+                            <div class="content">
+                                <p>Hello <span class="highlight">%s</span>,</p>
+
+                                <div class="celebration-card">
+                                    <div class="celebration-emoji">🎊</div>
+                                    <h2>Excellent News!</h2>
+                                    <p>Your outstanding penalty has been waived by library administration. You can continue enjoying your library privileges without any restrictions.</p>
+                                </div>
+
+                                <div class="waiver-summary">
+                                    <h3>💰 Penalty Waiver Details</h3>
+                                    <div class="waived-amount">%s</div>
+                                    <p><strong>Waiver Date:</strong> %s</p>
+                                    <p><strong>Status:</strong> <span style="color: #9c27b0; font-weight: 600;">FULLY WAIVED ✅</span></p>
+                                    <p><strong>Decision:</strong> Administrative waiver granted</p>
+                                </div>
+
+                                <div class="book-card">
+                                    <h2>📖 Related Book Information</h2>
+                                    <p><strong>Book Title:</strong> %s</p>
+                                    <p><strong>Author:</strong> %s</p>
+                                    <p><strong>Penalty Status:</strong> <span style="color: #9c27b0; font-weight: 600;">WAIVED - CLEARED ✅</span></p>
+                                </div>
+
+                                <p>This waiver reflects our appreciation for your continued membership and commitment to our library community. We value you as a member and are pleased to provide this courtesy.</p>
+
+                                <p>If you have any questions about this waiver decision or need assistance with any other library matters, please don't hesitate to contact our staff.</p>
+
+                                <p>Thank you for being a valued member of our library community!</p>
+
+                                <p>Best regards,<br>
+                                <strong>Library Management System</strong></p>
+                            </div>
+
+                            <div class="footer">
+                                <p><strong>Library Management System</strong></p>
+                                <p>Contact us at support@lms.edu | Visit us at library@lms.edu</p>
+                                <p>Waiver processed on %s</p>
+                                <p>© 2025 Library Management System. All rights reserved.</p>
+                            </div>
+                        </div>
+                    </body>
+                    </html>
+                    """,
+                    studentName,
+                    waivedAmount,
+                    waiverDate,
+                    bookTitle,
+                    bookAuthor,
+                    waiverDate
+                ).trim();
+
+                emailService.sendEmail(to, subject, htmlBody);
             } catch (Exception ignored) {}
         });
 
@@ -551,6 +923,9 @@ public class BorrowServiceImpl implements BorrowService {
 
     // helper mapper
     private com.infy.lms.dto.PenaltyDTO toPenaltyDto(BorrowRecord r) {
+        // Calculate days overdue for display purposes using calendar days
+        long daysOverdue = r.daysOverdue();
+
         return com.infy.lms.dto.PenaltyDTO.builder()
                 .borrowRecordId(r.getId())
                 .studentId(r.getStudent() == null ? null : r.getStudent().getId())
@@ -562,6 +937,7 @@ public class BorrowServiceImpl implements BorrowService {
                 .penaltyAmount(r.getPenaltyAmount())
                 .penaltyType(r.getPenaltyType())
                 .penaltyStatus(r.getPenaltyStatus())
+                .daysOverdue(daysOverdue)
                 .build();
     }
 
@@ -573,6 +949,7 @@ public class BorrowServiceImpl implements BorrowService {
     @Override
     @Transactional
     public void reconcileOverdues() {
+        // Use current time to detect overdue books accurately
         Instant now = Instant.now();
         List<BorrowRecord> overdue = borrowRepo.findOverdue(now);
         for (BorrowRecord rec : overdue) {
@@ -582,8 +959,7 @@ public class BorrowServiceImpl implements BorrowService {
             BigDecimal penaltyPerDay = mrp.multiply(BigDecimal.valueOf(0.1)).setScale(2, BigDecimal.ROUND_HALF_UP);
 
             // compute and set penalty (idempotent) - 10% of MRP per day overdue
-            long daysLate = Duration.between(rec.getDueDate(), now).toDays();
-            if (daysLate < 0) daysLate = 0;
+            long daysLate = rec.daysOverdue();
             BigDecimal totalPenalty = penaltyPerDay.multiply(BigDecimal.valueOf(daysLate)).setScale(2, BigDecimal.ROUND_HALF_UP);
             rec.setPenaltyAmount(daysLate > 0 ? totalPenalty : BigDecimal.ZERO);
             rec.setPenaltyType(daysLate > 0 ? BorrowRecord.PenaltyType.LATE : BorrowRecord.PenaltyType.NONE);
@@ -710,6 +1086,132 @@ public class BorrowServiceImpl implements BorrowService {
         }
 
         System.out.println("✅ DUE DATE ALERTS: Completed sending " + dueInTwoDays.size() + " reminders");
+    }
+
+    @Override
+    @Transactional
+    public void sendLowStockAlerts() {
+        System.out.println("🔍 LOW STOCK ALERTS: Checking for books with low stock (≤2 available copies)");
+
+        // Find all books with 2 or fewer available copies
+        List<Book> lowStockBooks = bookRepo.findAll().stream()
+                .filter(book -> {
+                    Integer available = book.getAvailableCopies();
+                    return available != null && available <= 2;
+                })
+                .collect(Collectors.toList());
+
+        System.out.println("📋 LOW STOCK ALERTS: Found " + lowStockBooks.size() + " books with low stock");
+
+        if (lowStockBooks.isEmpty()) {
+            System.out.println("✅ LOW STOCK ALERTS: No books with low stock, skipping alerts");
+            return;
+        }
+
+        // Find all admin and librarian users to send alerts to
+        List<User> adminUsers = userRepo.findAll().stream()
+                .filter(user -> {
+                    Role role = user.getRole();
+                    return role == Role.ADMIN || role == Role.LIBRARIAN;
+                })
+                .collect(Collectors.toList());
+
+        System.out.println("👥 LOW STOCK ALERTS: Found " + adminUsers.size() + " admin/librarian users to notify");
+
+        // Send email alerts to each admin
+        for (User admin : adminUsers) {
+            try {
+                if (admin.getEmail() != null) {
+                    String adminName = admin.getName() != null ? admin.getName() : "Administrator";
+                    String subject = "📚 Low Stock Alert - Books Need Restocking";
+
+                    // Build the email content with list of low-stock books
+                    StringBuilder bookList = new StringBuilder();
+                    for (Book book : lowStockBooks) {
+                        bookList.append(String.format(
+                            "• <strong>%s</strong> by %s<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Available: %d copies<br>",
+                            book.getTitle() != null ? book.getTitle() : "Unknown Title",
+                            book.getAuthor() != null ? book.getAuthor() : "Unknown Author",
+                            book.getAvailableCopies() != null ? book.getAvailableCopies() : 0
+                        ));
+                    }
+
+                    String htmlBody = String.format(
+                        """
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="UTF-8">
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                            <title>Low Stock Alert</title>
+                            <style>
+                                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #f9f9f9; }
+                                .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+                                .header { background: linear-gradient(135deg, #dc3545 0%, #b02a37 100%); color: white; padding: 30px 20px; text-align: center; }
+                                .content { padding: 30px 20px; }
+                                .book-list { background: #f8f9fa; border-left: 4px solid #dc3545; padding: 15px; margin: 20px 0; border-radius: 8px; }
+                                .warning-card { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 8px; color: #856404; }
+                                .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; border-top: 1px solid #e9ecef; }
+                                h1 { margin: 0; font-size: 28px; }
+                                h2 { color: #dc3545; margin-top: 0; }
+                                h3 { color: #856404; margin: 0 0 10px 0; }
+                                p { line-height: 1.6; }
+                                .highlight { color: #dc3545; font-weight: 600; }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="container">
+                                <div class="header">
+                                    <h1>📚 Low Stock Alert</h1>
+                                    <p>Books need restocking</p>
+                                </div>
+
+                                <div class="content">
+                                    <p>Hello <span class="highlight">%s</span>,</p>
+
+                                    <p>This alert notifies you that the following books have low stock (2 or fewer available copies) and may need restocking:</p>
+
+                                    <div class="book-list">
+                                        <h2>📖 Books with Low Stock</h2>
+                                        %s
+                                    </div>
+
+                                    <div class="warning-card">
+                                        <h2>⚠️ Action Required</h2>
+                                        <p>Please review the inventory and consider ordering more copies of these books to ensure availability for students.</p>
+                                        <p>Books with low stock may become unavailable for borrowing, affecting student access to library resources.</p>
+                                    </div>
+
+                                    <p>You can manage book inventory through the admin dashboard under the Books section.</p>
+
+                                    <p>Best regards,<br>
+                                    <strong>Library Management System</strong></p>
+                                </div>
+
+                                <div class="footer">
+                                    <p><strong>Library Management System</strong></p>
+                                    <p>This is an automated alert • Generated on %s</p>
+                                    <p>© 2025 Library Management System. All rights reserved.</p>
+                                </div>
+                            </div>
+                        </body>
+                        </html>
+                        """,
+                        adminName,
+                        bookList.toString(),
+                        java.time.format.DateTimeFormatter.ofPattern("MMMM dd, yyyy 'at' HH:mm")
+                            .format(java.time.LocalDateTime.now())
+                    ).trim();
+
+                    emailService.sendEmail(admin.getEmail(), subject, htmlBody);
+                    System.out.println("✅ LOW STOCK ALERT: Sent alert to " + admin.getEmail() + " about " + lowStockBooks.size() + " low-stock books");
+                }
+            } catch (Exception ex) {
+                System.out.println("❌ LOW STOCK ALERT: Failed to send alert to admin " + admin.getId() + ": " + ex.getMessage());
+            }
+        }
+
+        System.out.println("✅ LOW STOCK ALERTS: Completed sending alerts to " + adminUsers.size() + " administrators");
     }
 
     // -----------------------

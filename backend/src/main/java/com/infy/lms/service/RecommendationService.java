@@ -59,11 +59,17 @@ public class RecommendationService {
             bookScores.put(book, score);
         }
 
-        // 4. Sort by score and return top recommendations
+        // 4. Sort by score and return top recommendations with explanation
         return bookScores.entrySet().stream()
                 .sorted(Map.Entry.<Book, Double>comparingByValue().reversed())
                 .limit(10)
-                .map(entry -> convertToBookDTO(entry.getKey()))
+                .map(entry -> {
+                    Book book = entry.getKey();
+                    com.infy.lms.dto.BookDTO dto = convertToBookDTO(book);
+                    String reason = generateRecommendationReason(book, genrePreferences, tagPreferences, borrowHistory);
+                    dto.setRecommendationReason(reason);
+                    return dto;
+                })
                 .collect(Collectors.toList());
     }
 
@@ -154,6 +160,28 @@ public class RecommendationService {
                 .build();
     }
 
+    private String generateRecommendationReason(Book book, Map<String, Integer> genrePreferences, Map<String, Integer> tagPreferences, List<BorrowRecord> borrowHistory) {
+        List<String> parts = new ArrayList<>();
+        String genre = book.getGenre();
+        if (genre != null && genrePreferences.containsKey(genre)) {
+            parts.add("Matches your interest in " + genre);
+        }
+        List<String> bookTags = book.tagList();
+        List<String> matchingTags = bookTags.stream().filter(tagPreferences::containsKey).collect(Collectors.toList());
+        if (!matchingTags.isEmpty()) {
+            parts.add("Shared tags: " + String.join(", ", matchingTags));
+        }
+        // Popularity note
+        int popularity = borrowRecordRepository.findByBookId(book.getId()).size();
+        if (popularity > 5) {
+            parts.add("Popular choice among readers");
+        }
+        if (parts.isEmpty()) {
+            return "Recommended based on your reading patterns.";
+        }
+        return String.join("; ", parts);
+    }
+
     // Analytics methods for librarian and admin
     public Map<String, Integer> getFrequentlyRecommendedBooks() {
         // This would require storing recommendation history
@@ -166,17 +194,49 @@ public class RecommendationService {
                 ));
     }
 
-    public Map<String, Integer> getCategoryDemandTrends() {
-        List<BorrowRecord> allBorrows = borrowRecordRepository.findAll();
-        Map<String, Integer> categoryTrends = new HashMap<>();
-
-        for (BorrowRecord record : allBorrows) {
-            String genre = record.getBook().getGenre();
-            if (genre != null && !genre.trim().isEmpty()) {
-                categoryTrends.put(genre, categoryTrends.getOrDefault(genre, 0) + 1);
-            }
+    /**
+     * Aggregated popular books with filters and date range support.
+     */
+    public Map<String, Integer> getFrequentlyRecommendedBooks(java.time.Instant start, java.time.Instant end, String membershipType, String department, String location) {
+        List<Object[]> rows = borrowRecordRepository.countBorrowsGroupedByBook(start, end, membershipType, department, location);
+        Map<String, Integer> result = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            String title = (String) row[0];
+            Number cnt = (Number) row[1];
+            result.put(title, cnt == null ? 0 : cnt.intValue());
         }
+        return result;
+    }
 
-        return categoryTrends;
+    /**
+     * Aggregated genre trends with filters and date range support.
+     */
+    public Map<String, Integer> getCategoryDemandTrends(java.time.Instant start, java.time.Instant end, String membershipType, String department, String location) {
+        List<Object[]> rows = borrowRecordRepository.countBorrowsGroupedByGenre(start, end, membershipType, department, location);
+        Map<String, Integer> result = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            String genre = (String) row[0];
+            Number cnt = (Number) row[1];
+            if (genre == null || genre.trim().isEmpty()) continue;
+            result.put(genre, cnt == null ? 0 : cnt.intValue());
+        }
+        return result;
+    }
+
+    /**
+     * Time-series of borrow counts per day within the given filters.
+     */
+    public List<java.util.Map<String, Object>> getBorrowCountsByDay(java.time.Instant start, java.time.Instant end, String membershipType, String department, String location) {
+        List<Object[]> rows = borrowRecordRepository.countBorrowsByDay(start, end, membershipType, department, location);
+        List<Map<String, Object>> series = new ArrayList<>();
+        for (Object[] row : rows) {
+            java.sql.Date day = (java.sql.Date) row[0];
+            Number cnt = (Number) row[1];
+            Map<String, Object> point = new HashMap<>();
+            point.put("date", day.toLocalDate().toString());
+            point.put("count", cnt == null ? 0 : cnt.intValue());
+            series.add(point);
+        }
+        return series;
     }
 }

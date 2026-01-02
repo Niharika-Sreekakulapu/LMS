@@ -512,24 +512,7 @@ const StudentProfile: React.FC = () => {
                   </span>
                 </div>
 
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  background: 'rgba(255, 215, 0, 0.05)',
-                  padding: '10px 16px',
-                  borderRadius: '20px',
-                  border: '1px solid rgba(255, 215, 0, 0.2)'
-                }}>
-                  <span style={{ fontSize: '1.1rem', color: '#D2691E' }}>🏆</span>
-                  <span style={{
-                    color: '#8B4513',
-                    fontSize: '0.95rem',
-                    fontWeight: '600'
-                  }}>
-                    {formatNumber(profile.pointsBalance || 0)} Reward Points
-                  </span>
-                </div>
+                {/* Reward points summary removed per design */}
               </div>
             </div>
 
@@ -858,52 +841,37 @@ const StudentProfile: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Favorite Genre stat card removed per request */}
+              </div>
+
+              {/* Reading Tip */}
+              <div style={{
+                marginTop: '20px'
+              }}>
                 <div style={{
-                  background: 'linear-gradient(135deg, #FFFFFF 0%, #F9F6F0 100%)',
-                  border: '2px solid #E8D1A7',
-                  borderRadius: '16px',
-                  padding: '24px',
-                  textAlign: 'center',
-                  boxShadow: '0 8px 25px rgba(139, 69, 19, 0.1)',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  transition: 'all 0.3s ease'
+                  background: 'linear-gradient(135deg, #FFFFFF 0%, #FAF9F6 100%)',
+                  borderRadius: '12px',
+                  padding: '20px',
+                  border: '1px solid #E8D1A7',
+                  boxShadow: '0 6px 20px rgba(139, 69, 19, 0.06)'
                 }}>
                   <div style={{
-                    position: 'absolute',
-                    top: '-20px',
-                    right: '-20px',
-                    width: '60px',
-                    height: '60px',
-                    background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.1) 0%, rgba(255, 165, 0, 0.05) 100%)',
-                    borderRadius: '50%',
-                    pointerEvents: 'none'
-                  }} />
-                  <div style={{
-                    fontSize: '2.2rem',
-                    fontWeight: '800',
-                    marginBottom: '8px',
-                    background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text'
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    marginBottom: '12px'
                   }}>
-                    {formatNumber(profile.pointsBalance || 0)}
+                    <span style={{ fontSize: '1.2rem' }}>💡</span>
+                    <div style={{ fontSize: '1rem', fontWeight: '700', color: '#2A1F16' }}>
+                      Reading Tip of the Day
+                    </div>
                   </div>
-                  <div style={{
-                    fontSize: '0.9rem',
-                    color: '#6B4423',
-                    fontWeight: '600',
-                    marginBottom: '4px'
-                  }}>
-                    🏆 Reward Points
-                  </div>
-                  <div style={{
-                    fontSize: '0.75rem',
-                    color: '#8B7355',
-                    opacity: '0.8'
-                  }}>
-                    Earned through reading
+                  <div style={{ color: '#6B4423', fontSize: '0.95rem', lineHeight: '1.6' }}>
+                    <em>"The more that you read, the more things you will know. The more that you learn, the more places you'll go."</em>
+                    <br />
+                    <span style={{ fontSize: '0.85rem', color: '#8B7355', marginTop: '8px', display: 'block' }}>
+                      — Dr. Seuss
+                    </span>
                   </div>
                 </div>
               </div>

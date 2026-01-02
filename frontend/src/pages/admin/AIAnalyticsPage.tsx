@@ -1,10 +1,51 @@
-import { useState, useEffect } from "react";
-import { getPopularBooksAnalytics, getCategoryTrendsAnalytics } from "../../api/libraryApi";
+import { useState, useEffect, useMemo } from "react";
+import { getPopularBooksAnalytics, getCategoryTrendsAnalytics, getPopularBooksTimeSeries } from "../../api/libraryApi";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend
+} from 'recharts';
 
 export default function AIAnalyticsPage() {
   const [popularBooks, setPopularBooks] = useState<Record<string, number>>({});
   const [categoryTrends, setCategoryTrends] = useState<Record<string, number>>({});
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+  // Time-series data for charts
+  const [timeSeries, setTimeSeries] = useState<Array<{date: string; count: number}>>([]);
+
+  // Pie data derived from category trends
+  const pieData = useMemo(() => Object.entries(categoryTrends || {}).map(([name, value]) => ({ name, value })), [categoryTrends]);
+
+  // Full month data with all days
+  const fullMonthData = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const lastDay = new Date(year, month + 1, 0).getDate();
+
+    // Create map of existing data
+    const dataMap = new Map(timeSeries.map(item => [item.date, item.count]));
+
+    // Generate full month data
+    const fullData = [];
+    for (let day = 1; day <= lastDay; day++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      fullData.push({
+        date: dateStr,
+        count: dataMap.get(dateStr) || 0
+      });
+    }
+    return fullData;
+  }, [timeSeries]);
 
   useEffect(() => {
     loadRecommendationAnalytics();
@@ -13,12 +54,21 @@ export default function AIAnalyticsPage() {
   const loadRecommendationAnalytics = async () => {
     setAnalyticsLoading(true);
     try {
-      const [popularResponse, trendsResponse] = await Promise.all([
-        getPopularBooksAnalytics(),
-        getCategoryTrendsAnalytics()
+      // keep global filters for counts, but ensure time-series covers current month by default
+      const seriesParams: Record<string, string> = {};
+      const now = new Date();
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      seriesParams.since = firstDayOfMonth.toISOString().split('T')[0];
+
+      const [popularResponse, trendsResponse, seriesResponse] = await Promise.all([
+        getPopularBooksAnalytics(undefined),
+        getCategoryTrendsAnalytics(undefined),
+        getPopularBooksTimeSeries(Object.keys(seriesParams).length ? seriesParams : undefined)
       ]);
+
       setPopularBooks(popularResponse.data);
       setCategoryTrends(trendsResponse.data);
+      setTimeSeries(seriesResponse.data || []);
     } catch (error) {
       console.error('Error loading recommendation analytics:', error);
     } finally {
@@ -51,6 +101,9 @@ export default function AIAnalyticsPage() {
           track popular books, and optimize your library collection with data-driven decisions! 📈✨
         </p>
       </div>
+
+      {/* Spacer */}
+      <div style={{ height: 16 }} />
 
       {analyticsLoading ? (
         <div style={{
@@ -177,6 +230,73 @@ export default function AIAnalyticsPage() {
             </div>
           </div>
 
+          {/* Trend & Genre (side-by-side) */}
+          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+            <div style={{ flex: '1 1 50%', minWidth: 280 }}>
+              <div style={{
+                background: 'white',
+                borderRadius: '12px',
+                padding: '18px',
+                border: '1px solid #E8D1A7',
+                boxShadow: '0 6px 20px rgba(139, 69, 19, 0.06)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{ fontWeight: 700, color: '#2A1F16' }}>Monthly Borrow Trend</div>
+                  <div style={{ fontSize: '0.9rem', color: '#666' }}>Current Month</div>
+                </div>
+                <div style={{ width: '100%', height: 320 }}>
+                  <ResponsiveContainer>
+                    <LineChart data={fullMonthData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="count" stroke="#8B4513" strokeWidth={3} dot={{ r: 2 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ flex: '1 1 50%', minWidth: 280 }}>
+              <div style={{
+                background: 'white',
+                borderRadius: '12px',
+                padding: '18px',
+                border: '1px solid #E8D1A7',
+                boxShadow: '0 6px 20px rgba(139, 69, 19, 0.06)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{ fontWeight: 700, color: '#2A1F16' }}>Genre Distribution</div>
+                  <div style={{ fontSize: '0.9rem', color: '#666' }}>Last 90 days → Now</div>
+                </div>
+
+                {pieData && pieData.length > 0 && pieData.reduce((s, d) => s + (d.value || 0), 0) > 0 ? (
+                  <div style={{ width: '100%', height: 320 }}>
+                    <ResponsiveContainer width="100%" height={320}>
+                      <PieChart>
+                        <Tooltip />
+                        <Legend layout="vertical" align="right" verticalAlign="middle" />
+                        <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100}>
+                          {pieData.map((entry, idx) => (
+                            <Cell key={`cell-${entry.name}`} fill={["#8B4513", "#D2691E", "#CD853F", "#F4E4BC", "#A0522D"][idx % 5]} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '12px', opacity: 0.6 }}>📊</div>
+                    <div style={{ fontWeight: 700, color: '#2A1F16' }}>No Genre Data</div>
+                    <div style={{ color: '#999' }}>Genre distribution will appear here once borrowing data is available.</div>
+                  </div>
+                )}
+
+              </div>
+            </div>
+          </div>
+
           {/* Main Analytics Sections */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(500px, 1fr))", gap: "32px" }}>
             {/* Popular Books Section */}
@@ -239,6 +359,8 @@ export default function AIAnalyticsPage() {
                   </div>
                 </div>
 
+
+
                 <div style={{
                   maxHeight: "420px",
                   overflowY: "auto",
@@ -248,7 +370,7 @@ export default function AIAnalyticsPage() {
                     Object.entries(popularBooks)
                       .sort(([,a], [,b]) => b - a)
                       .slice(0, 10)
-                      .map(([bookTitle, count], index) => (
+                      .map(([bookTitle], index) => (
                         <div key={bookTitle} style={{
                           display: "flex",
                           alignItems: "center",
@@ -286,19 +408,6 @@ export default function AIAnalyticsPage() {
                             marginTop: index < 3 ? "8px" : "0"
                           }}>
                             {bookTitle}
-                          </div>
-                          <div style={{
-                            background: "linear-gradient(135deg, #8B4513, #654321)",
-                            color: "white",
-                            padding: "8px 16px",
-                            borderRadius: "20px",
-                            fontSize: "1rem",
-                            fontWeight: "800",
-                            boxShadow: "0 4px 12px rgba(139, 69, 19, 0.3)",
-                            minWidth: "60px",
-                            textAlign: "center"
-                          }}>
-                            {count}
                           </div>
                         </div>
                       ))
@@ -405,11 +514,10 @@ export default function AIAnalyticsPage() {
                     Object.entries(categoryTrends)
                       .sort(([,a], [,b]) => b - a)
                       .slice(0, 10)
-                      .map(([category, count], index) => (
+                      .map(([category], index) => (
                         <div key={category} style={{
                           display: "flex",
                           alignItems: "center",
-                          justifyContent: "space-between",
                           padding: "18px 20px",
                           marginBottom: "12px",
                           background: index < 3 ? "linear-gradient(135deg, #fff8dc 0%, #f5f5dc 100%)" : "#f8f9fa",
@@ -436,26 +544,12 @@ export default function AIAnalyticsPage() {
                           )}
 
                           <div style={{
-                            flex: 1,
                             fontSize: "1rem",
                             fontWeight: index < 3 ? "700" : "600",
                             color: "#2A1F16",
                             marginTop: index < 3 ? "8px" : "0"
                           }}>
                             {category}
-                          </div>
-                          <div style={{
-                            background: "linear-gradient(135deg, #8B4513, #654321)",
-                            color: "white",
-                            padding: "8px 16px",
-                            borderRadius: "20px",
-                            fontSize: "1rem",
-                            fontWeight: "800",
-                            boxShadow: "0 4px 12px rgba(139, 69, 19, 0.3)",
-                            minWidth: "60px",
-                            textAlign: "center"
-                          }}>
-                            {count}
                           </div>
                         </div>
                       ))

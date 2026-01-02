@@ -57,6 +57,8 @@ export interface Book {
   status?: 'AVAILABLE' | 'BORROWED' | 'RESERVED' | 'DAMAGED';
   mrp?: number;
   accessLevel?: 'NORMAL' | 'PREMIUM';
+  // Small explanatory text for reasons when a recommendation is returned from the API
+  recommendationReason?: string;
 }
 
 export interface BorrowHistory {
@@ -198,7 +200,8 @@ export interface PenaltyDTO {
   dueDate: string; // ISO date string
   penaltyAmount: number;
   penaltyType: 'NONE' | 'LATE' | 'DAMAGE' | 'LOST';
-  penaltyStatus: 'NONE' | 'PENDING' | 'PAID';
+  penaltyStatus: 'NONE' | 'PENDING' | 'PAID' | 'WAIVED';
+  daysOverdue?: number;
 }
 
 export interface PaymentRequestDTO {

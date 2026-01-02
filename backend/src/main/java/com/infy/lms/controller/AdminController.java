@@ -1,6 +1,7 @@
 package com.infy.lms.controller;
 
 import com.infy.lms.dto.AdminActionResponse;
+import com.infy.lms.dto.AdminSettings;
 import com.infy.lms.dto.UserSummaryDto;
 import com.infy.lms.model.RequestStatus;
 import com.infy.lms.model.User;
@@ -11,9 +12,12 @@ import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +32,18 @@ public class AdminController {
     private final AuthService authService;
     private final BookRequestRepository bookRequestRepository;
     private final BookRepository bookRepository;
+
+    // In-memory settings storage (for demo purposes - should be in database)
+    private static final AdminSettings DEFAULT_SETTINGS = new AdminSettings(
+        14,     // defaultLoanDays
+        10.0,   // finePerDay
+        3,      // maxBooksPerUser
+        "Standard membership rules apply", // membershipRules
+        LocalDateTime.now().toString(), // lastUpdated
+        "system" // lastUpdatedBy
+    );
+
+    private AdminSettings currentSettings = DEFAULT_SETTINGS;
 
     @PostMapping("/approve/{id}")
     public ResponseEntity<AdminActionResponse> approve(@PathVariable @Positive Long id) {
@@ -88,6 +104,7 @@ public class AdminController {
     }
 
     @GetMapping("/book-stats")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('LIBRARIAN')")
     public ResponseEntity<Map<String, Long>> getBookStats() {
         long totalBooks = bookRepository.count();
         // Temporary implementation until findByAccessLevel method is added to repository
@@ -100,6 +117,31 @@ public class AdminController {
         stats.put("premiumBooks", premiumBooks);
 
         return ResponseEntity.ok(stats);
+    }
+
+    @GetMapping("/settings")
+    public ResponseEntity<AdminSettings> getSettings() {
+        return ResponseEntity.ok(currentSettings);
+    }
+
+    @PutMapping("/settings")
+    public ResponseEntity<AdminSettings> updateSettings(@RequestBody AdminSettings newSettings) {
+        // Get current user for audit trail
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String updatedBy = auth != null ? auth.getName() : "unknown";
+
+        // Update settings with timestamp
+        AdminSettings updated = new AdminSettings(
+            newSettings.getDefaultLoanDays(),
+            newSettings.getFinePerDay(),
+            newSettings.getMaxBooksPerUser(),
+            newSettings.getMembershipRules() != null ? newSettings.getMembershipRules() : currentSettings.getMembershipRules(),
+            LocalDateTime.now().toString(),
+            updatedBy
+        );
+
+        currentSettings = updated;
+        return ResponseEntity.ok(currentSettings);
     }
 
 

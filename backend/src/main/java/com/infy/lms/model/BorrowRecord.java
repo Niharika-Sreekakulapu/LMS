@@ -4,7 +4,10 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import com.infy.lms.enums.BorrowStatus;
 
@@ -72,12 +75,17 @@ public class BorrowRecord {
     }
 
     public boolean isOverdue() {
-        return this.returnedAt == null && this.dueDate != null && Instant.now().isAfter(this.dueDate);
+        if (this.returnedAt != null || this.dueDate == null) return false;
+        LocalDate dueLocalDate = this.dueDate.atZone(ZoneId.systemDefault()).toLocalDate();
+        LocalDate nowLocalDate = Instant.now().atZone(ZoneId.systemDefault()).toLocalDate();
+        return nowLocalDate.isAfter(dueLocalDate);
     }
 
     public long daysOverdue() {
         if (!isOverdue()) return 0;
-        return ChronoUnit.DAYS.between(this.dueDate.truncatedTo(ChronoUnit.DAYS), Instant.now().truncatedTo(ChronoUnit.DAYS));
+        LocalDate dueLocalDate = this.dueDate.atZone(ZoneId.systemDefault()).toLocalDate();
+        LocalDate nowLocalDate = Instant.now().atZone(ZoneId.systemDefault()).toLocalDate();
+        return ChronoUnit.DAYS.between(dueLocalDate, nowLocalDate);
     }
 
     public BigDecimal computeAndSetLatePenalty(double bookMrp) {
@@ -88,20 +96,21 @@ public class BorrowRecord {
             this.penaltyStatus = PenaltyStatus.NONE;
             return this.penaltyAmount;
         }
-        // Late penalty is 10% of MRP if overdue
+        // Late penalty is 10% of MRP per day overdue
         BigDecimal mrp = BigDecimal.valueOf(bookMrp);
-        BigDecimal penalty = mrp.multiply(BigDecimal.valueOf(0.1)).setScale(2, BigDecimal.ROUND_HALF_UP);
-        this.penaltyAmount = penalty;
+        BigDecimal penaltyPerDay = mrp.multiply(BigDecimal.valueOf(0.1)).setScale(2, BigDecimal.ROUND_HALF_UP);
+        BigDecimal totalPenalty = penaltyPerDay.multiply(BigDecimal.valueOf(days)).setScale(2, BigDecimal.ROUND_HALF_UP);
+        this.penaltyAmount = totalPenalty;
         this.penaltyType = PenaltyType.LATE;
-        if (penalty.compareTo(BigDecimal.ZERO) > 0) {
+        if (totalPenalty.compareTo(BigDecimal.ZERO) > 0) {
             this.penaltyStatus = PenaltyStatus.PENDING;
         }
-        return penalty;
+        return totalPenalty;
     }
 
-    public void markReturnedNow(double finePerDay) {
+    public void markReturnedNow(double bookMrp) {
         this.returnedAt = Instant.now();
-        computeAndSetLatePenalty(finePerDay);
+        computeAndSetLatePenalty(bookMrp);
         this.status = BorrowStatus.RETURNED;
     }
 }

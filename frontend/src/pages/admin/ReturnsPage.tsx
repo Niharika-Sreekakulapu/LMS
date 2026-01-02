@@ -94,10 +94,16 @@ function ReturnsPage() {
   };
 
   const getDaysOverdue = (dueDate: string) => {
+    // Use calendar day calculation to match backend
     const due = new Date(dueDate);
     const now = new Date();
-    const diffTime = now.getTime() - due.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    // Convert to local dates (calendar days)
+    const dueLocalDate = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+    const nowLocalDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const diffTime = nowLocalDate.getTime() - dueLocalDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     return Math.max(0, diffDays);
   };
 
@@ -772,7 +778,7 @@ function ReturnsPage() {
                 </table>
 
                 {/* Pagination Controls for History */}
-                {filteredReturnedBooks.length > itemsPerPage && (
+                {filteredReturnedBooks.length > 0 && (
                   <div style={{
                     background: 'white',
                     padding: '20px',
@@ -984,7 +990,7 @@ function ReturnsPage() {
                 </table>
 
                 {/* Pagination Controls */}
-                {filteredBorrows.length > itemsPerPage && (
+                {filteredBorrows.length > 0 && (
                   <div style={{
                     background: 'white',
                     padding: '20px',

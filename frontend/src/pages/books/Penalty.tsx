@@ -18,6 +18,8 @@ const Penalty: React.FC = () => {
   const [itemsPerPage] = useState(10);
   const [activeSort, setActiveSort] = useState<'dueDate_desc' | 'dueDate_asc' | 'fine_desc' | 'fine_asc'>('dueDate_desc');
 
+
+
   useEffect(() => {
     loadTransactions();
   }, []);
@@ -55,6 +57,8 @@ const Penalty: React.FC = () => {
     }).format(amount);
   };
 
+
+
   // Filter transactions with penalties or fine situations
   const penaltyTransactions = transactions.filter((transaction) => {
     // Exclude records that have been resolved (paid or waived)
@@ -66,16 +70,15 @@ const Penalty: React.FC = () => {
     const hasPendingPenalty = transaction.penaltyAmount && transaction.penaltyAmount > 0 &&
                              transaction.penaltyStatus === 'PENDING';
 
-    // Check if book is overdue (not returned and past due date)
-    const isOverdue = !transaction.returnedAt && new Date(transaction.dueDate) < new Date();
     const isLost = transaction.status === 'LOST';
 
+    // Only include penalties for returned books, lost books, or damaged books
     if (statusFilter === 'ALL') {
-      return hasPendingPenalty || isOverdue || isLost;
+      return (hasPendingPenalty && transaction.returnedAt) || isLost || transaction.status === 'DAMAGED';
     }
     return (
-      (statusFilter === 'OVERDUE' && (hasPendingPenalty || isOverdue)) ||
-      (statusFilter === 'LOST' && isLost)
+      (statusFilter === 'OVERDUE' && hasPendingPenalty && transaction.returnedAt) ||
+      (statusFilter === 'LOST' && (isLost || transaction.status === 'DAMAGED'))
     );
   });
 
@@ -89,13 +92,19 @@ const Penalty: React.FC = () => {
     );
   });
 
-  const getOverdueDays = (dueDate: string, returnedAt?: string) => {
+  function getOverdueDays(dueDate: string, returnedAt?: string) {
+    // Use calendar day calculation to match backend
     const due = new Date(dueDate);
     const reference = returnedAt ? new Date(returnedAt) : new Date();
-    const diffTime = reference.getTime() - due.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    // Convert to local dates (calendar days)
+    const dueLocalDate = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+    const referenceLocalDate = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate());
+
+    const diffTime = referenceLocalDate.getTime() - dueLocalDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     return diffDays > 0 ? diffDays : 0;
-  };
+  }
 
   const calculateOverdueFine = (overdueDays: number, bookMrp?: number) => {
     // Penalty is 10% of MRP per day overdue
@@ -108,8 +117,7 @@ const Penalty: React.FC = () => {
   };
 
   const getStatusBadge = (transaction: BorrowHistory) => {
-    const isOverdue = !transaction.returnedAt && new Date(transaction.dueDate) < new Date();
-    const overdueDays = isOverdue ? getOverdueDays(transaction.dueDate) : 0;
+    const overdueDays = getOverdueDays(transaction.dueDate);
 
     // Priority: LOST > DAMAGED > OVERDUE > other penalties > none
     if (transaction.status === 'LOST' || transaction.penaltyType === 'LOST') {
@@ -254,7 +262,7 @@ const Penalty: React.FC = () => {
   };
 
   const getOverdueReturnsCount = () => {
-    return transactions.filter((t) => !t.returnedAt && new Date(t.dueDate) < new Date()).length;
+    return transactions.filter((t) => !t.returnedAt && getOverdueDays(t.dueDate) > 0).length;
   };
 
   const getLostBooksCount = () => {
@@ -268,8 +276,8 @@ const Penalty: React.FC = () => {
   // Create fines history - includes all fines (both active and historical)
   const allFineHistory = transactions.filter((transaction) => {
     // Books that were returned overdue, or currently overdue, or lost, or have completed penalties
-    const wasOverdue = transaction.returnedAt && new Date(transaction.dueDate) < new Date(transaction.returnedAt);
-    const isCurrentlyOverdue = !transaction.returnedAt && new Date(transaction.dueDate) < new Date();
+    const wasOverdue = transaction.returnedAt && getOverdueDays(transaction.dueDate, transaction.returnedAt) > 0;
+    const isCurrentlyOverdue = !transaction.returnedAt && getOverdueDays(transaction.dueDate) > 0;
     const isLost = transaction.status === 'LOST';
     const hasCompletedPenalty = transaction.penaltyStatus === 'PAID' || transaction.penaltyStatus === 'WAIVED';
 
@@ -290,7 +298,7 @@ const Penalty: React.FC = () => {
     .filter((transaction) => {
       if (statusFilter === 'ALL') return true;
       if (statusFilter === 'OVERDUE') {
-        return !transaction.returnedAt && new Date(transaction.dueDate) < new Date();
+        return !transaction.returnedAt && getOverdueDays(transaction.dueDate) > 0;
       }
       return transaction.status === 'LOST';
     })
@@ -301,13 +309,13 @@ const Penalty: React.FC = () => {
         case 'dueDate_asc':
           return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
         case 'fine_desc': {
-          const aFine = calculateOverdueFine(getOverdueDays(a.dueDate, a.returnedAt), a.bookMrp);
-          const bFine = calculateOverdueFine(getOverdueDays(b.dueDate, b.returnedAt), b.bookMrp);
+          const aFine = (a.penaltyAmount && a.penaltyAmount > 0) ? a.penaltyAmount : calculateOverdueFine(getOverdueDays(a.dueDate, a.returnedAt), a.bookMrp);
+          const bFine = (b.penaltyAmount && b.penaltyAmount > 0) ? b.penaltyAmount : calculateOverdueFine(getOverdueDays(b.dueDate, b.returnedAt), b.bookMrp);
           return bFine - aFine;
         }
         case 'fine_asc': {
-          const aFine = calculateOverdueFine(getOverdueDays(a.dueDate, a.returnedAt), a.bookMrp);
-          const bFine = calculateOverdueFine(getOverdueDays(b.dueDate, b.returnedAt), b.bookMrp);
+          const aFine = (a.penaltyAmount && a.penaltyAmount > 0) ? a.penaltyAmount : calculateOverdueFine(getOverdueDays(a.dueDate, a.returnedAt), a.bookMrp);
+          const bFine = (b.penaltyAmount && b.penaltyAmount > 0) ? b.penaltyAmount : calculateOverdueFine(getOverdueDays(b.dueDate, b.returnedAt), b.bookMrp);
           return aFine - bFine;
         }
         default:
@@ -316,8 +324,8 @@ const Penalty: React.FC = () => {
     });
 
   const getFineHistoryStatus = (transaction: BorrowHistory) => {
-    const wasOverdue = transaction.returnedAt && new Date(transaction.dueDate) < new Date(transaction.returnedAt);
-    const isCurrentlyOverdue = !transaction.returnedAt && new Date(transaction.dueDate) < new Date();
+    const wasOverdue = transaction.returnedAt && getOverdueDays(transaction.dueDate, transaction.returnedAt) > 0;
+    const isCurrentlyOverdue = !transaction.returnedAt && getOverdueDays(transaction.dueDate) > 0;
     const isLost = transaction.status === 'LOST';
 
     // Priority: PAID/WAIVED > LOST > OVERDUE > COLLECTED
@@ -775,14 +783,107 @@ const Penalty: React.FC = () => {
             boxShadow: '0 4px 15px rgba(154,91,52,0.1)',
           }}
         >
+
+
+          {/* Results Summary for History (moved above controls) */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '15px',
+              padding: '15px',
+              background: '#f8f9fa',
+              borderRadius: '8px',
+              border: '1px solid #e9ecef',
+              marginBottom: '15px'
+            }}
+          >
+            <div style={{ textAlign: 'center' }}>
+              <div
+                style={{
+                  fontSize: '1.2rem',
+                  fontWeight: '700',
+                  color: '#1ccf90',
+                  marginBottom: '4px',
+                }}
+              >
+                {filteredFinesHistory.filter((t) => {
+                  // Books that were returned overdue (collected) or were returned on time
+                  const wasOverdue = t.returnedAt && getOverdueDays(t.dueDate, t.returnedAt) > 0;
+                  const returnedOnTime = t.returnedAt && getOverdueDays(t.dueDate, t.returnedAt) === 0;
+                  return wasOverdue || returnedOnTime;
+                }).length}
+              </div>
+              <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#2A1F16' }}>
+                ✅ Collected
+              </div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div
+                style={{
+                  fontSize: '1.2rem',
+                  fontWeight: '700',
+                  color: '#c62828',
+                  marginBottom: '4px',
+                }}
+              >
+                {filteredFinesHistory.filter((t) => {
+                  // Books that were returned late (returned after due date)
+                  return t.returnedAt && getOverdueDays(t.dueDate, t.returnedAt) > 0;
+                }).length}
+              </div>
+              <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#2A1F16' }}>
+                ⚠️ Late Returns
+              </div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div
+                style={{
+                  fontSize: '1.2rem',
+                  fontWeight: '700',
+                  color: '#ff8f00',
+                  marginBottom: '4px',
+                }}
+              >
+                {filteredFinesHistory.filter((t) => {
+                  // Lost or damaged books
+                  return t.status === 'LOST' || t.status === 'DAMAGED' || t.penaltyType === 'LOST' || t.penaltyType === 'DAMAGE';
+                }).length}
+              </div>
+              <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#2A1F16' }}>
+                🏷️ Lost/Damaged Books
+              </div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div
+                style={{
+                  fontSize: '1.2rem',
+                  fontWeight: '700',
+                  color: '#2A1F16',
+                  marginBottom: '4px',
+                }}
+              >
+                {formatCurrency(filteredFinesHistory.reduce((total, t) => {
+                  const overdueDays = getOverdueDays(t.dueDate, t.returnedAt);
+                  const overdueFine = calculateOverdueFine(overdueDays, t.bookMrp);
+                  const amount = (t.penaltyAmount && t.penaltyAmount > 0) ? t.penaltyAmount : overdueFine;
+                  return total + (amount || 0);
+                }, 0))}
+              </div>
+              <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#2A1F16' }}>
+                💵 Total Amount
+              </div>
+            </div>
+          </div>
+
+          {/* Controls Section - moved below stats */}
           <div
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
               gap: '20px',
               marginBottom: '15px',
-            }}
-          >
+            }}>
             {/* Search Control for History */}
             <div style={{ position: 'relative' }}>
               <input
@@ -841,8 +942,8 @@ const Penalty: React.FC = () => {
                 }}
               >
                 <option value="ALL">🎯 All Status</option>
-                <option value="OVERDUE">⚠️ Pending</option>
-                <option value="LOST">❌ Lost Book</option>
+                <option value="OVERDUE">⚠️ Overdue</option>
+                <option value="LOST">❌ Lost/Damaged</option>
               </select>
             </div>
 
@@ -878,91 +979,6 @@ const Penalty: React.FC = () => {
                 <option value="fine_desc">💰 Highest Fine</option>
                 <option value="fine_asc">💰 Lowest Fine</option>
               </select>
-            </div>
-          </div>
-
-          {/* Results Summary for History */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: '15px',
-              padding: '15px',
-              background: '#f8f9fa',
-              borderRadius: '8px',
-              border: '1px solid #e9ecef',
-            }}
-          >
-            <div style={{ textAlign: 'center' }}>
-              <div
-                style={{
-                  fontSize: '1.2rem',
-                  fontWeight: '700',
-                  color: '#1ccf90',
-                  marginBottom: '4px',
-                }}
-              >
-                {filteredFinesHistory.filter((t) => {
-                  // Books that were returned overdue (collected) or were returned on time
-                  const wasOverdue = t.returnedAt && new Date(t.dueDate) < new Date(t.returnedAt);
-                  const returnedOnTime = t.returnedAt && new Date(t.dueDate) >= new Date(t.returnedAt);
-                  return wasOverdue || returnedOnTime;
-                }).length}
-              </div>
-              <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#2A1F16' }}>
-                ✅ Collected
-              </div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div
-                style={{
-                  fontSize: '1.2rem',
-                  fontWeight: '700',
-                  color: '#c62828',
-                  marginBottom: '4px',
-                }}
-              >
-                {filteredFinesHistory.filter((t) => {
-                  // Currently overdue books (not returned and past due date)
-                  return !t.returnedAt && new Date(t.dueDate) < new Date();
-                }).length}
-              </div>
-              <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#2A1F16' }}>
-                ⚠️ Pending
-              </div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div
-                style={{
-                  fontSize: '1.2rem',
-                  fontWeight: '700',
-                  color: '#ff8f00',
-                  marginBottom: '4px',
-                }}
-              >
-                {filteredFinesHistory.filter((t) => {
-                  // Lost books
-                  return t.status === 'LOST';
-                }).length}
-              </div>
-              <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#2A1F16' }}>
-                🏷️ Lost Books
-              </div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div
-                style={{
-                  fontSize: '1.2rem',
-                  fontWeight: '700',
-                  color: '#2A1F16',
-                  marginBottom: '4px',
-                }}
-              >
-                {formatCurrency(filteredFinesHistory.reduce((total, t) => total + calculateOverdueFine(getOverdueDays(t.dueDate, t.returnedAt), t.bookMrp), 0))}
-              </div>
-              <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#2A1F16' }}>
-                💵 Total Amount
-              </div>
             </div>
           </div>
         </div>
@@ -1055,8 +1071,8 @@ const Penalty: React.FC = () => {
                   </thead>
                   <tbody>
                     {filteredPenalties.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((transaction, index) => {
-                      const isOverdue = !transaction.returnedAt && new Date(transaction.dueDate) < new Date();
                       const overdueDays = getOverdueDays(transaction.dueDate);
+                      const isOverdue = !transaction.returnedAt && overdueDays > 0;
 
                       return (
                         <tr
@@ -1268,17 +1284,17 @@ const Penalty: React.FC = () => {
                     <tr style={{ backgroundColor: '#f1f3f4' }}>
                       <th style={{ padding: '15px 12px', textAlign: 'left', fontWeight: '600', color: '#495057', borderBottom: '2px solid #dee2e6' }}>Book Details</th>
                       <th style={{ padding: '15px 12px', textAlign: 'left', fontWeight: '600', color: '#495057', borderBottom: '2px solid #dee2e6' }}>Member</th>
-                      <th style={{ padding: '15px 12px', textAlign: 'center', fontWeight: '600', color: '#495057', borderBottom: '2px solid #dee2e6' }}>Due Date</th>
                       <th style={{ padding: '15px 12px', textAlign: 'center', fontWeight: '600', color: '#495057', borderBottom: '2px solid #dee2e6' }}>Fine Amount</th>
                       <th style={{ padding: '15px 12px', textAlign: 'center', fontWeight: '600', color: '#495057', borderBottom: '2px solid #dee2e6' }}>Issue Date</th>
+                      <th style={{ padding: '15px 12px', textAlign: 'center', fontWeight: '600', color: '#495057', borderBottom: '2px solid #dee2e6' }}>Due Date</th>
                       <th style={{ padding: '15px 12px', textAlign: 'center', fontWeight: '600', color: '#495057', borderBottom: '2px solid #dee2e6' }}>Return Date</th>
                       <th style={{ padding: '15px 12px', textAlign: 'center', fontWeight: '600', color: '#495057', borderBottom: '2px solid #dee2e6' }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredFinesHistory.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((transaction, index) => {
-                      const isCurrentlyOverdue = !transaction.returnedAt && new Date(transaction.dueDate) < new Date();
                       const overdueDays = getOverdueDays(transaction.dueDate, transaction.returnedAt);
+                      const isCurrentlyOverdue = !transaction.returnedAt && overdueDays > 0;
                       const overdueFine = calculateOverdueFine(overdueDays, transaction.bookMrp);
 
                       return (
@@ -1330,18 +1346,6 @@ const Penalty: React.FC = () => {
                             </div>
                           </td>
 
-                          {/* Due Date */}
-                          <td style={{ padding: '20px 12px', textAlign: 'center', verticalAlign: 'top' }}>
-                            <div style={{ fontWeight: '600', color: '#2A1F16' }}>
-                              {formatDateShort(transaction.dueDate)}
-                            </div>
-                            {overdueDays > 0 && (
-                              <div style={{ fontSize: '0.8rem', color: '#dc3545', marginTop: '4px', fontWeight: '500' }}>
-                                {overdueDays} days overdue
-                              </div>
-                            )}
-                          </td>
-
                           {/* Fine Amount */}
                           <td style={{ padding: '20px 12px', textAlign: 'center', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: '700', color: '#dc3545', fontSize: '1.1rem', marginBottom: '4px' }}>
@@ -1358,14 +1362,26 @@ const Penalty: React.FC = () => {
                             )}
                           </td>
 
-                          {/* Issue Date (Due date context) */}
+                          {/* Issue Date */}
+                          <td style={{ padding: '20px 12px', textAlign: 'center', verticalAlign: 'top' }}>
+                            <div style={{ fontWeight: '600', color: '#2A1F16' }}>
+                              {formatDateShort(transaction.borrowedAt)}
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: '#6c757d', marginTop: '4px' }}>
+                              Issue date
+                            </div>
+                          </td>
+
+                          {/* Due Date */}
                           <td style={{ padding: '20px 12px', textAlign: 'center', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: '600', color: '#2A1F16' }}>
                               {formatDateShort(transaction.dueDate)}
                             </div>
-                            <div style={{ fontSize: '0.8rem', color: '#6c757d', marginTop: '4px' }}>
-                              Due date
-                            </div>
+                            {overdueDays > 0 && (
+                              <div style={{ fontSize: '0.8rem', color: '#dc3545', marginTop: '4px', fontWeight: '500' }}>
+                                {overdueDays} days overdue
+                              </div>
+                            )}
                           </td>
 
                           {/* Return Date */}
@@ -1380,7 +1396,7 @@ const Penalty: React.FC = () => {
                             )}
                           </td>
 
-                          {/* Status (moved to last column) */}
+                          {/* Status */}
                           <td style={{ padding: '20px 12px', textAlign: 'center', verticalAlign: 'top' }}>
                             {getFineHistoryStatus(transaction)}
                           </td>

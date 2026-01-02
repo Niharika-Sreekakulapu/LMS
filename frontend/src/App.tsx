@@ -30,6 +30,7 @@ import Reports from "./pages/admin/ReportsPage";
 import AIAnalyticsPage from "./pages/admin/AIAnalyticsPage";
 import AcquisitionRequestsManagementPage from "./pages/admin/AcquisitionRequestsManagementPage";
 import ReturnsPage from "./pages/admin/ReturnsPage";
+import AdminWaitlistManagement from "./pages/admin/AdminWaitlistManagement";
 
 import SystemPage from "./pages/admin/SystemPage";
 import BooksCatalogPage from "./pages/admin/BooksCatalogPage";
@@ -51,6 +52,7 @@ import StudentBorrows from "./pages/student/StudentBorrows";
 import StudentFines from "./pages/student/StudentFines";
 import StudentProfile from "./pages/student/StudentProfile";
 import StudentMembershipRequests from "./pages/student/StudentMembershipRequests";
+import StudentWaitlist from "./pages/student/StudentWaitlist";
 
 export default function App() {
   useEffect(() => {
@@ -95,6 +97,7 @@ export default function App() {
             <Route path="acquisition-requests" element={<AcquisitionRequestsManagementPage />} />
 
             <Route path="returns" element={<ReturnsPage />} />
+            <Route path="waitlist" element={<AdminWaitlistManagement />} />
             <Route path="ai-analytics" element={<AIAnalyticsPage />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<SettingsPage />} />
@@ -109,6 +112,7 @@ export default function App() {
 
             <Route path="members" element={<Members />} />
             <Route path="returns" element={<ReturnsPage />} />
+            <Route path="waitlist" element={<AdminWaitlistManagement />} />
             <Route path="penalty" element={<Penalty />} />
             <Route path="pro-membership-books" element={<ProMembershipBooks />} />
 
@@ -130,6 +134,7 @@ export default function App() {
             <Route path="requests" element={<StudentRequests />} />
             <Route path="membership" element={<StudentMembershipRequests />} />
             <Route path="borrows" element={<StudentBorrows />} />
+            <Route path="waitlist" element={<StudentWaitlist />} />
             <Route path="fines" element={<StudentFines />} />
             <Route path="profile" element={<StudentProfile />} />
           </Route>

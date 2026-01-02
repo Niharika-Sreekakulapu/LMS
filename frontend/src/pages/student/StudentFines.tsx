@@ -60,20 +60,7 @@ const StudentFines: React.FC = () => {
     setTimeout(() => setToastMessage(null), 5000);
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 
-    if (diffInDays === 0) return 'Today';
-    if (diffInDays === 1) return 'Yesterday';
-    if (diffInDays < 7) return `${diffInDays} days ago`;
-    return date.toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
 
 
 
@@ -218,7 +205,9 @@ const StudentFines: React.FC = () => {
   };
 
   const pendingPenalties = penalties.filter(p => p.penaltyStatus === 'PENDING');
-  const paidPenalties = penalties.filter(p => p.penaltyStatus === 'PAID' || p.penaltyStatus === 'WAIVED');
+  const paidPenalties = penalties.filter(p => p.penaltyStatus === 'PAID');
+  const waivedPenalties = penalties.filter(p => p.penaltyStatus === 'WAIVED');
+  const historyPenalties = [...paidPenalties, ...waivedPenalties]; // For payment history tab
 
   // Stats calculation
   const totalPendingAmount = pendingPenalties.reduce((sum, p) => sum + p.penaltyAmount, 0);
@@ -420,7 +409,7 @@ const StudentFines: React.FC = () => {
             fontWeight: '800',
             marginBottom: '4px'
           }}>
-            {paidPenalties.length}
+            {historyPenalties.length}
           </div>
           <div style={{
             fontSize: '0.9rem',
@@ -503,7 +492,7 @@ const StudentFines: React.FC = () => {
               transition: 'all 0.3s ease'
             }}
           >
-            📜 Payment History {paidPenalties.length > 0 && (
+            📜 Payment History {historyPenalties.length > 0 && (
               <span style={{
                 background: activeTab === 'history' ? 'rgba(255,255,255,0.3)' : '#28a745',
                 color: 'white',
@@ -512,7 +501,7 @@ const StudentFines: React.FC = () => {
                 fontSize: '0.75rem',
                 fontWeight: '700'
               }}>
-                {paidPenalties.length}
+                {historyPenalties.length}
               </span>
             )}
           </button>
@@ -640,7 +629,11 @@ const StudentFines: React.FC = () => {
                             fontSize: '0.9rem',
                             fontWeight: '500'
                           }}>
-                            {formatDate(penalty.dueDate)}
+                            {new Date(penalty.dueDate).toLocaleDateString('en-IN', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            })}
                           </div>
                         </div>
 
@@ -696,7 +689,7 @@ const StudentFines: React.FC = () => {
             </>
           ) : (
             <>
-              {paidPenalties.length === 0 ? (
+              {historyPenalties.length === 0 ? (
                 <div style={{
                   background: 'linear-gradient(135deg, #f8fff8 0%, #ffffff 100%)',
                   borderRadius: '16px',
@@ -716,7 +709,7 @@ const StudentFines: React.FC = () => {
                 </div>
               ) : (
                 <div style={{ display: 'grid', gap: '12px' }}>
-                  {paidPenalties.map((penalty) => (
+                  {historyPenalties.map((penalty) => (
                     <div
                       key={penalty.borrowRecordId}
                       style={{
@@ -834,14 +827,24 @@ const StudentFines: React.FC = () => {
                             color: '#2A1F16',
                             marginBottom: '4px'
                           }}>
-                            {penalty.penaltyStatus === 'PAID' ? 'Payment Date' : 'Processed Date'}
+                            Payment Status
                           </div>
                           <div style={{
                             color: penalty.penaltyStatus === 'PAID' ? '#2e7d32' : '#ff9800',
                             fontWeight: '600'
                           }}>
-                            {formatDate(penalty.dueDate)}
-                            {penalty.penaltyStatus === 'WAIVED' && ' (Waived)'}
+                            {penalty.penaltyStatus === 'PAID' && penalty.paidAt
+                              ? new Date(penalty.paidAt).toLocaleDateString('en-IN', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })
+                              : penalty.penaltyStatus === 'PAID'
+                              ? 'Payment recorded'
+                              : penalty.penaltyStatus === 'WAIVED'
+                              ? 'Waived - No payment required'
+                              : 'Processed'
+                            }
                           </div>
                         </div>
 

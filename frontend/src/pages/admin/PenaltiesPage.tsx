@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { getAllPendingPenalties, payPenalty, computePenalty, reconcilePenalties } from '../../api/libraryApi';
+import { getAllPenalties, payPenalty, computePenalty, reconcilePenalties } from '../../api/libraryApi';
 import type { PenaltyDTO } from '../../types/dto';
 
 function PenaltiesPage() {
   const [penalties, setPenalties] = useState<PenaltyDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<{ [key: number]: boolean }>({});
+
+  // Tab management
+  const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
+
+  // Filter/Sort states for fines history
+  const [sortBy, setSortBy] = useState<'amount-high' | 'amount-low' | 'date-new' | 'date-old' | 'student'>('date-new');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'paid'>('all');
 
   // Reconcile modal state
   const [showReconcileModal, setShowReconcileModal] = useState(false);
@@ -26,7 +33,7 @@ function PenaltiesPage() {
   const loadPenalties = async () => {
     try {
       setLoading(true);
-      const response = await getAllPendingPenalties();
+      const response = await getAllPenalties();
       setPenalties(response.data);
     } catch (error) {
       console.error('Error loading penalties:', error);
@@ -92,6 +99,25 @@ function PenaltiesPage() {
             }}
           >
             ✅ PAID
+          </span>
+        );
+      case 'WAIVED':
+        return (
+          <span
+            style={{
+              color: '#ff9800',
+              fontWeight: '600',
+              backgroundColor: '#fff3e0',
+              border: '1px solid #ff5722',
+              padding: '6px 14px',
+              borderRadius: '25px',
+              fontSize: '0.8em',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+            }}
+          >
+            🆓 WAIVED
           </span>
         );
       default:
@@ -408,159 +434,443 @@ function PenaltiesPage() {
         </div>
       </div>
 
-      {/* Penalties Table */}
-      {penalties.length === 0 ? (
-        <div
-          style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '60px 40px',
-            textAlign: 'center',
-            border: '1px solid #E8D1A7',
-            boxShadow: '0 4px 15px rgba(154,91,52,0.1)',
-          }}
-        >
-          <div style={{ fontSize: '4rem', marginBottom: '20px', opacity: '0.6' }}>
-            💰
-          </div>
-          <h3 style={{ color: '#2A1F16', marginBottom: '15px', fontSize: '1.5rem', fontWeight: '600' }}>
-            No Penalties Found
-          </h3>
-          <p style={{ color: '#666', fontSize: '1rem', maxWidth: '400px', margin: '0 auto' }}>
-            All student penalties have been resolved. Great job!
-          </p>
+      {/* Tabs */}
+      <div style={{
+        background: 'white',
+        borderRadius: '12px',
+        padding: '0',
+        marginBottom: '20px',
+        border: '1px solid #E8D1A7',
+        boxShadow: '0 4px 15px rgba(154,91,52,0.1)',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          display: 'flex',
+          borderBottom: '1px solid #e9ecef'
+        }}>
+          <button
+            onClick={() => setActiveTab('pending')}
+            style={{
+              flex: 1,
+              padding: '16px 20px',
+              background: activeTab === 'pending' ? 'linear-gradient(135deg, #dc3545, #c82333)' : 'transparent',
+              color: activeTab === 'pending' ? 'white' : '#2A1F16',
+              border: 'none',
+              fontSize: '1rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              transition: 'all 0.3s ease',
+              borderRadius: activeTab === 'pending' ? '0' : '0'
+            }}
+          >
+            ⏳ Pending Penalties {totalPendingPenalties > 0 && (
+              <span style={{
+                background: activeTab === 'pending' ? 'rgba(255,255,255,0.3)' : '#dc3545',
+                color: activeTab === 'pending' ? 'white' : 'white',
+                borderRadius: '12px',
+                padding: '2px 8px',
+                fontSize: '0.75rem',
+                fontWeight: '700'
+              }}>
+                {totalPendingPenalties}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            style={{
+              flex: 1,
+              padding: '16px 20px',
+              background: activeTab === 'history' ? 'linear-gradient(135deg, #28a745, #20c997)' : 'transparent',
+              color: activeTab === 'history' ? 'white' : '#2A1F16',
+              border: 'none',
+              fontSize: '1rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              transition: 'all 0.3s ease'
+            }}
+          >
+            📜 Fines History {totalPaidPenalties > 0 && (
+              <span style={{
+                background: activeTab === 'history' ? 'rgba(255,255,255,0.3)' : '#28a745',
+                color: 'white',
+                borderRadius: '12px',
+                padding: '2px 8px',
+                fontSize: '0.75rem',
+                fontWeight: '700'
+              }}>
+                {totalPaidPenalties}
+              </span>
+            )}
+          </button>
         </div>
-      ) : (
-        <div
-          style={{
-            background: 'white',
-            borderRadius: '12px',
-            border: '1px solid #E8D1A7',
-            overflow: 'hidden',
-            boxShadow: '0 4px 15px rgba(154,91,52,0.1)',
-          }}
-        >
-          <div style={{ padding: '20px', background: '#f8f9fa', borderBottom: '1px solid #E8D1A7' }}>
-            <h3 style={{ margin: 0, color: '#2A1F16', fontSize: '1.3rem', fontWeight: '700' }}>
-              ⚖️ All Penalties ({penalties.length})
-            </h3>
-          </div>
 
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1200px' }}>
-              <thead>
-                <tr style={{ background: '#f8f9fa' }}>
-                  <th style={{ padding: '16px 12px', textAlign: 'left', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
-                    📚 Penalty Details
-                  </th>
-                  <th style={{ padding: '16px 12px', textAlign: 'left', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
-                    👤 Student
-                  </th>
-                  <th style={{ padding: '16px 12px', textAlign: 'center', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
-                    📅 Dates
-                  </th>
-                  <th style={{ padding: '16px 12px', textAlign: 'center', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
-                    ❌ Amount
-                  </th>
-                  <th style={{ padding: '16px 12px', textAlign: 'center', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
-                    📊 Status
-                  </th>
-                  <th style={{ padding: '16px 12px', textAlign: 'center', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
-                    ⚙️ Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {penalties.map((penalty) => (
-                  <tr
-                    key={penalty.borrowRecordId}
+        <div style={{ padding: '20px' }}>
+          {activeTab === 'pending' ? (
+            <>
+              {totalPendingPenalties === 0 ? (
+                <div style={{
+                  background: 'linear-gradient(135deg, #fff5f5 0%, #ffffff 100%)',
+                  borderRadius: '16px',
+                  padding: '80px 40px',
+                  textAlign: 'center',
+                  border: '1px solid rgba(220,53,69,0.2)',
+                }}>
+                  <div style={{ fontSize: '6rem', marginBottom: '24px', opacity: '0.7' }}>
+                    ✅
+                  </div>
+                  <h3 style={{ color: '#2A1F16', marginBottom: '16px', fontSize: '1.8rem', fontWeight: '600' }}>
+                    No Pending Penalties
+                  </h3>
+                  <p style={{ color: '#6c757d', fontSize: '1.1rem', maxWidth: '400px', margin: '0 auto', lineHeight: '1.6' }}>
+                    All outstanding penalties have been resolved. Great job maintaining the library's financial records!
+                  </p>
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1200px' }}>
+                    <thead>
+                      <tr style={{ background: '#f8f9fa' }}>
+                        <th style={{ padding: '16px 12px', textAlign: 'left', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
+                          📚 Penalty Details
+                        </th>
+                        <th style={{ padding: '16px 12px', textAlign: 'left', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
+                          👤 Student
+                        </th>
+                        <th style={{ padding: '16px 12px', textAlign: 'center', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
+                          📅 Dates
+                        </th>
+                        <th style={{ padding: '16px 12px', textAlign: 'center', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
+                          ❌ Amount
+                        </th>
+                        <th style={{ padding: '16px 12px', textAlign: 'center', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
+                          📊 Status
+                        </th>
+                        <th style={{ padding: '16px 12px', textAlign: 'center', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
+                          ⚙️ Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {penalties.filter(p => p.penaltyStatus === 'PENDING').map((penalty) => (
+                        <tr
+                          key={penalty.borrowRecordId}
+                          style={{
+                            borderBottom: '1px solid #E8D1A7',
+                            backgroundColor: Math.floor(penalty.borrowRecordId % 2) === 0 ? '#fff9f9' : '#fefafa'
+                          }}
+                        >
+                          <td style={{ padding: '16px 12px', fontSize: '0.95rem' }}>
+                            <div style={{ fontWeight: '600', color: '#2A1F16', marginBottom: '4px' }}>
+                              #{penalty.borrowRecordId}
+                            </div>
+                            <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                              {penalty.bookTitle.length > 40 ? penalty.bookTitle.substring(0, 40) + '...' : penalty.bookTitle}
+                            </div>
+                            <div style={{ fontSize: '0.85rem', color: '#888', marginTop: '2px' }}>
+                              {getPenaltyReason(penalty.penaltyType)}
+                            </div>
+                          </td>
+                          <td style={{ padding: '16px 12px', fontSize: '0.95rem' }}>
+                            <div style={{ fontWeight: '600', color: '#2A1F16' }}>
+                              {penalty.studentName}
+                            </div>
+                            <div style={{ fontSize: '0.85rem', color: '#6c757d' }}>
+                              ID: {penalty.studentId}
+                            </div>
+                          </td>
+                          <td style={{ padding: '16px 12px', textAlign: 'center', fontSize: '0.95rem' }}>
+                            <div style={{ color: '#2A1F16' }}>
+                              <div>Issued: {formatDate(penalty.borrowedAt)}</div>
+                              <div style={{ color: '#dc3545', marginTop: '2px' }}>
+                                Due: {formatDate(penalty.dueDate)}
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '16px 12px', textAlign: 'center', fontSize: '0.95rem' }}>
+                            <div style={{
+                              fontWeight: '700',
+                              color: penalty.penaltyStatus === 'PAID' ? '#2e7d32' : '#ff9800'
+                            }}>
+                              ₹{penalty.penaltyAmount.toFixed(2)}
+                            </div>
+                            {penalty.daysOverdue && penalty.daysOverdue > 0 && penalty.penaltyType === 'LATE' && (
+                              <div style={{
+                                fontSize: '0.75rem',
+                                color: '#666',
+                                marginTop: '2px'
+                              }}>
+                                ₹{(penalty.penaltyAmount / penalty.daysOverdue).toFixed(2)}/day × {penalty.daysOverdue} days
+                              </div>
+                            )}
+                            {penalty.penaltyType === 'DAMAGE' || penalty.penaltyType === 'LOST' ? (
+                              <div style={{
+                                fontSize: '0.75rem',
+                                color: '#666',
+                                marginTop: '2px'
+                              }}>
+                                Full replacement cost
+                              </div>
+                            ) : null}
+                          </td>
+                          <td style={{ padding: '16px 12px', textAlign: 'center' }}>
+                            {getStatusBadge(penalty.penaltyStatus)}
+                          </td>
+                          <td style={{ padding: '16px 12px', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                              <button
+                                onClick={() => openPaymentModal(penalty)}
+                                style={{
+                                  background: '#28a745',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  padding: '6px 12px',
+                                  fontSize: '0.85rem',
+                                  cursor: 'pointer',
+                                  fontWeight: '600',
+                                }}
+                                disabled={actionLoading[penalty.borrowRecordId]}
+                              >
+                                💳 Pay
+                              </button>
+                              <button
+                                onClick={() => handleManualCompute(penalty.borrowRecordId)}
+                                style={{
+                                  background: '#6c757d',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  padding: '6px 12px',
+                                  fontSize: '0.85rem',
+                                  cursor: 'pointer',
+                                  fontWeight: '600',
+                                }}
+                                disabled={actionLoading[penalty.borrowRecordId]}
+                              >
+                                {actionLoading[penalty.borrowRecordId] ? '⏳' : '🔄'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Filter/Sort Controls for Fines History */}
+              <div style={{
+                display: 'flex',
+                gap: '16px',
+                marginBottom: '20px',
+                alignItems: 'center',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ fontWeight: '600', color: '#2A1F16', fontSize: '0.9rem' }}>
+                    Sort by:
+                  </label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
                     style={{
-                      borderBottom: '1px solid #E8D1A7',
-                      backgroundColor: penalty.penaltyStatus === 'PENDING'
-                        ? (Math.floor(penalty.borrowRecordId % 2) === 0 ? '#fff9f9' : '#fefafa')
-                        : '#f8fffa' // Light green for paid
+                      padding: '8px 12px',
+                      border: '2px solid #ddd',
+                      borderRadius: '6px',
+                      background: 'white',
+                      fontSize: '0.85rem',
+                      fontWeight: '500',
+                      color: '#2A1F16',
+                      cursor: 'pointer',
+                      minWidth: '140px',
                     }}
                   >
-                    <td style={{ padding: '16px 12px', fontSize: '0.95rem' }}>
-                      <div style={{ fontWeight: '600', color: '#2A1F16', marginBottom: '4px' }}>
-                        #{penalty.borrowRecordId}
-                      </div>
-                      <div style={{ fontSize: '0.9rem', color: '#666' }}>
-                        {penalty.bookTitle.length > 40 ? penalty.bookTitle.substring(0, 40) + '...' : penalty.bookTitle}
-                      </div>
-                      <div style={{ fontSize: '0.85rem', color: '#888', marginTop: '2px' }}>
-                        {getPenaltyReason(penalty.penaltyType)}
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px 12px', fontSize: '0.95rem' }}>
-                      <div style={{ fontWeight: '600', color: '#2A1F16' }}>
-                        {penalty.studentName}
-                      </div>
-                      <div style={{ fontSize: '0.85rem', color: '#6c757d' }}>
-                        ID: {penalty.studentId}
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px 12px', textAlign: 'center', fontSize: '0.95rem' }}>
-                      <div style={{ color: '#2A1F16' }}>
-                        <div>Issued: {formatDate(penalty.borrowedAt)}</div>
-                        <div style={{ color: '#dc3545', marginTop: '2px' }}>
-                          Due: {formatDate(penalty.dueDate)}
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px 12px', textAlign: 'center', fontSize: '0.95rem' }}>
-                      <span style={{ fontWeight: '700', color: '#dc3545' }}>
-                        ₹{penalty.penaltyAmount.toFixed(2)}
-                      </span>
-                    </td>
-                    <td style={{ padding: '16px 12px', textAlign: 'center' }}>
-                      {getStatusBadge(penalty.penaltyStatus)}
-                    </td>
-                    <td style={{ padding: '16px 12px', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                        {penalty.penaltyStatus === 'PENDING' && (
-                          <button
-                            onClick={() => openPaymentModal(penalty)}
+                    <option value="date-new">📅 Newest First</option>
+                    <option value="date-old">📅 Oldest First</option>
+                    <option value="amount-high">💰 Highest Fine</option>
+                    <option value="amount-low">💰 Lowest Fine</option>
+                    <option value="student">👤 Student Name</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ fontWeight: '600', color: '#2A1F16', fontSize: '0.9rem' }}>
+                    Status:
+                  </label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                    style={{
+                      padding: '8px 12px',
+                      border: '2px solid #ddd',
+                      borderRadius: '6px',
+                      background: 'white',
+                      fontSize: '0.85rem',
+                      fontWeight: '500',
+                      color: '#2A1F16',
+                      cursor: 'pointer',
+                      minWidth: '120px',
+                    }}
+                  >
+                    <option value="all">📊 All Status</option>
+                    <option value="paid">✅ Paid</option>
+                  </select>
+                </div>
+              </div>
+
+              {(() => {
+                // Filter and sort penalties for history tab
+                let filteredPenalties = penalties.filter(p => p.penaltyStatus === 'PAID' || p.penaltyStatus === 'WAIVED');
+
+                if (statusFilter !== 'all') {
+                  filteredPenalties = filteredPenalties.filter(p => p.penaltyStatus === 'PAID');
+                }
+
+                // Sort penalties
+                filteredPenalties.sort((a, b) => {
+                  switch (sortBy) {
+                    case 'amount-high':
+                      return b.penaltyAmount - a.penaltyAmount;
+                    case 'amount-low':
+                      return a.penaltyAmount - b.penaltyAmount;
+                    case 'date-new':
+                      return new Date(b.borrowedAt).getTime() - new Date(a.borrowedAt).getTime();
+                    case 'date-old':
+                      return new Date(a.borrowedAt).getTime() - new Date(b.borrowedAt).getTime();
+                    case 'student':
+                      return a.studentName.localeCompare(b.studentName);
+                    default:
+                      return 0;
+                  }
+                });
+
+                return filteredPenalties.length === 0 ? (
+                  <div style={{
+                    background: 'linear-gradient(135deg, #f8fff8 0%, #ffffff 100%)',
+                    borderRadius: '16px',
+                    padding: '80px 40px',
+                    textAlign: 'center',
+                    border: '1px solid rgba(40,167,69,0.2)',
+                  }}>
+                    <div style={{ fontSize: '6rem', marginBottom: '24px', opacity: '0.7' }}>
+                      📜
+                    </div>
+                    <h3 style={{ color: '#2A1F16', marginBottom: '16px', fontSize: '1.8rem', fontWeight: '600' }}>
+                      No Fines History
+                    </h3>
+                    <p style={{ color: '#6c757d', fontSize: '1.1rem', maxWidth: '400px', margin: '0 auto', lineHeight: '1.6' }}>
+                      Fines history will appear here once penalties are paid or waived.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1200px' }}>
+                      <thead>
+                        <tr style={{ background: '#f8f9fa' }}>
+                          <th style={{ padding: '16px 12px', textAlign: 'left', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
+                            📚 Penalty Details
+                          </th>
+                          <th style={{ padding: '16px 12px', textAlign: 'left', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
+                            👤 Student
+                          </th>
+                          <th style={{ padding: '16px 12px', textAlign: 'center', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
+                            📅 Dates
+                          </th>
+                          <th style={{ padding: '16px 12px', textAlign: 'center', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
+                            ❌ Amount
+                          </th>
+                          <th style={{ padding: '16px 12px', textAlign: 'center', fontWeight: '700', fontSize: '0.95rem', color: '#2A1F16', borderBottom: '2px solid #E8D1A7' }}>
+                            📊 Status
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredPenalties.map((penalty) => (
+                          <tr
+                            key={penalty.borrowRecordId}
                             style={{
-                              background: '#28a745',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '6px',
-                              padding: '6px 12px',
-                              fontSize: '0.85rem',
-                              cursor: 'pointer',
-                              fontWeight: '600',
+                              borderBottom: '1px solid #E8D1A7',
+                              backgroundColor: penalty.penaltyStatus === 'PAID' ? '#f8fffa' : '#fff8e1'
                             }}
-                            disabled={actionLoading[penalty.borrowRecordId]}
                           >
-                            💳 Pay
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleManualCompute(penalty.borrowRecordId)}
-                          style={{
-                            background: '#6c757d',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '6px 12px',
-                            fontSize: '0.85rem',
-                            cursor: 'pointer',
-                            fontWeight: '600',
-                          }}
-                          disabled={actionLoading[penalty.borrowRecordId]}
-                        >
-                          {actionLoading[penalty.borrowRecordId] ? '⏳' : '🔄'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                            <td style={{ padding: '16px 12px', fontSize: '0.95rem' }}>
+                              <div style={{ fontWeight: '600', color: '#2A1F16', marginBottom: '4px' }}>
+                                #{penalty.borrowRecordId}
+                              </div>
+                              <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                                {penalty.bookTitle.length > 40 ? penalty.bookTitle.substring(0, 40) + '...' : penalty.bookTitle}
+                              </div>
+                              <div style={{ fontSize: '0.85rem', color: '#888', marginTop: '2px' }}>
+                                {getPenaltyReason(penalty.penaltyType)}
+                              </div>
+                            </td>
+                            <td style={{ padding: '16px 12px', fontSize: '0.95rem' }}>
+                              <div style={{ fontWeight: '600', color: '#2A1F16' }}>
+                                {penalty.studentName}
+                              </div>
+                              <div style={{ fontSize: '0.85rem', color: '#6c757d' }}>
+                                ID: {penalty.studentId}
+                              </div>
+                            </td>
+                            <td style={{ padding: '16px 12px', textAlign: 'center', fontSize: '0.95rem' }}>
+                              <div style={{ color: '#2A1F16' }}>
+                                <div>Issued: {formatDate(penalty.borrowedAt)}</div>
+                                <div style={{ color: '#666', marginTop: '2px' }}>
+                                  Due: {formatDate(penalty.dueDate)}
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ padding: '16px 12px', textAlign: 'center', fontSize: '0.95rem' }}>
+                              <div style={{
+                                fontWeight: '700',
+                                color: penalty.penaltyStatus === 'PAID' ? '#2e7d32' : '#ff9800'
+                              }}>
+                                ₹{penalty.penaltyAmount.toFixed(2)}
+                              </div>
+                              {penalty.daysOverdue && penalty.daysOverdue > 0 && penalty.penaltyType === 'LATE' && (
+                                <div style={{
+                                  fontSize: '0.75rem',
+                                  color: '#666',
+                                  marginTop: '2px'
+                                }}>
+                                  ₹{(penalty.penaltyAmount / penalty.daysOverdue).toFixed(2)}/day × {penalty.daysOverdue} days
+                                </div>
+                              )}
+                              {penalty.penaltyType === 'DAMAGE' || penalty.penaltyType === 'LOST' ? (
+                                <div style={{
+                                  fontSize: '0.75rem',
+                                  color: '#666',
+                                  marginTop: '2px'
+                                }}>
+                                  Full replacement cost
+                                </div>
+                              ) : null}
+                            </td>
+                            <td style={{ padding: '16px 12px', textAlign: 'center' }}>
+                              {getStatusBadge(penalty.penaltyStatus)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Payment Modal */}
       {showPaymentModal && selectedPenalty && (

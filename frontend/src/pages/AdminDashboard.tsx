@@ -7,6 +7,14 @@ import axios from "axios";
 import client from "../api/axiosClient";
 import { useAuth } from "../hooks/useAuth";
 import Toast, { type ToastType } from "../components/Toast";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  Legend
+} from 'recharts';
 
 
 type UnknownRecord = Record<string, unknown>;
@@ -281,10 +289,11 @@ export default function AdminDashboard() {
     { label: "Dashboard", path: "/admin", icon: "🏠" },
     { label: "Users", path: "/admin/users", icon: "👥" },
     { label: "Books", path: "/admin/books", icon: "📚" },
-    { label: "Penalties", path: "/admin/penalties", icon: "💰" },
     { label: "Issues", path: "/admin/requests", icon: "⚠️" },
     { label: "Requests", path: "/admin/acquisition-requests", icon: "📚" },
     { label: "Returns", path: "/admin/returns", icon: "🔄" },
+    { label: "Waitlist", path: "/admin/waitlist", icon: "📋" },
+    { label: "Penalties", path: "/admin/penalties", icon: "💰" },
     { label: "AI Analytics", path: "/admin/ai-analytics", icon: "🤖" },
     { label: "Reports", path: "/admin/reports", icon: "📊" },
     { label: "Settings", path: "/admin/settings", icon: "⚙️" },
@@ -394,7 +403,7 @@ export default function AdminDashboard() {
             <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 12 }}>
               <div style={{ background: "linear-gradient(135deg, #8B4513 0%, #654321 100%)", color: "#F4E4BC", padding: 20, borderRadius: 12, textAlign: "center", boxShadow: "0 4px 15px rgba(139, 69, 19, 0.3)", border: "1px solid #E8D1A7" }}>
                 <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 8 }}>{total}</div>
-                <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>👥 Total Users</div>
+                <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>👥 Total Requests</div>
               </div>
 
               <div style={{ background: "linear-gradient(135deg, #E8D1A7 0%, #CDA776 100%)", color: "#2A1F16", padding: 20, borderRadius: 12, textAlign: "center", boxShadow: "0 4px 15px rgba(232, 209, 167, 0.3)" }}>
@@ -425,47 +434,27 @@ export default function AdminDashboard() {
                   <div style={{ color: "#6b7280", fontSize: 16 }}>Distribution</div>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 16, alignItems: "center" }}>
-                  <svg width={340} height={250} viewBox="0 0 300 250" aria-hidden>
-                    <g transform="translate(150,125)">
-                      {(() => {
-                        const radius = 95;
-                        const circumference = 2 * Math.PI * radius;
-                        let offset = 0;
-                        const segs = pieSegments;
-                        const sum = Math.max(1, segs.reduce((s, x) => s + x.value, 0));
-                        return segs.map((s) => {
-                          const stroke = (s.value / sum) * circumference;
-                          const dashArray = `${stroke} ${circumference - stroke}`;
-                          const el = (
-                            <circle
-                              key={s.label}
-                              r={radius}
-                              fill="transparent"
-                              stroke={s.color}
-                              strokeWidth={45}
-                              strokeDasharray={dashArray}
-                              strokeDashoffset={-offset}
-                              transform="rotate(-90)"
-                            />
-                          );
-                          offset += stroke;
-                          return el;
-                        });
-                      })()}
-                    </g>
-                  </svg>
-
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                    {pieSegments.map((p) => (
-                      <div key={p.label} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <div style={{ width: 16, height: 16, background: p.color, borderRadius: 6 }} />
-                        <div style={{ fontWeight: 700, minWidth: 80, fontSize: 16 }}>{p.label}</div>
-                        <div style={{ color: "#6b7280", fontSize: 16 }}>{p.value}</div>
-                      </div>
-                    ))}
+                {pieSegments && pieSegments.length > 0 && pieSegments.reduce((s, d) => s + (d.value || 0), 0) > 0 ? (
+                  <div style={{ width: '100%', height: 320 }}>
+                    <ResponsiveContainer width="100%" height={320}>
+                      <PieChart>
+                        <Tooltip />
+                        <Legend layout="vertical" align="right" verticalAlign="middle" />
+                        <Pie data={pieSegments} dataKey="value" nameKey="label" cx="50%" cy="50%" outerRadius={120}>
+                          {pieSegments.map((entry) => (
+                            <Cell key={`cell-${entry.label}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
                   </div>
-                </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '12px', opacity: 0.6 }}>📊</div>
+                    <div style={{ fontWeight: 700, color: '#2A1F16' }}>No Request Data</div>
+                    <div style={{ color: '#999' }}>Request status will appear here once data is available.</div>
+                  </div>
+                )}
               </div>
 
               <div style={{ background: "white", padding: 28, borderRadius: 12, minHeight: 420 }}>

@@ -34,6 +34,7 @@ public class BorrowController {
     private final UserRepository userRepo;
     private final BookRepository bookRepo;
     private final com.infy.lms.repository.BorrowRecordRepository borrowRepo;
+    private final com.infy.lms.service.SecurityService securityService;
 
     // 1) Borrow a book
     @PreAuthorize("hasAnyRole('STUDENT','LIBRARIAN','ADMIN')")
@@ -181,6 +182,14 @@ public class BorrowController {
         return ResponseEntity.ok(list);
     }
 
+    // Admin/Librarian: list all penalties (pending, paid, waived)
+    @PreAuthorize("hasAnyRole('LIBRARIAN','ADMIN')")
+    @GetMapping("/penalties")
+    public ResponseEntity<List<com.infy.lms.dto.PenaltyDTO>> getAllPenalties() {
+        List<com.infy.lms.dto.PenaltyDTO> list = borrowService.getAllPenalties();
+        return ResponseEntity.ok(list);
+    }
+
 
 
     // Pay a penalty (student can pay their own; admin/librarian can pay any)
@@ -188,8 +197,44 @@ public class BorrowController {
     @PostMapping("/borrow/{borrowRecordId}/pay")
     public ResponseEntity<Map<String, String>> payPenaltyEndpoint(@PathVariable Long borrowRecordId,
                                                                   @RequestBody com.infy.lms.dto.PaymentRequestDTO payment) {
-        String res = borrowService.payPenalty(borrowRecordId, payment.getAmount());
-        return ResponseEntity.ok(Map.of("message", res));
+        try {
+            System.out.println("🔍 PAYMENT CONTROLLER: Processing payment for borrowRecordId=" + borrowRecordId);
+            System.out.println("   Payment amount: " + payment.getAmount());
+
+            // Validate ownership for students (admins/librarians can pay any penalty)
+            BorrowRecord record = borrowRepo.findById(borrowRecordId)
+                    .orElseThrow(() -> new BorrowException("Borrow record not found"));
+
+            System.out.println("   Found borrow record:");
+            System.out.println("   Record ID: " + record.getId());
+            System.out.println("   Student ID: " + record.getStudent().getId());
+            System.out.println("   Penalty Amount: " + record.getPenaltyAmount());
+            System.out.println("   Penalty Status: " + record.getPenaltyStatus());
+
+            // For students, ensure they own this penalty
+            if (!securityService.hasAnyRole("LIBRARIAN", "ADMIN")) {
+                Long currentUserId = securityService.getCurrentUserId();
+                System.out.println("   Current user ID: " + currentUserId);
+                System.out.println("   Record belongs to student ID: " + record.getStudent().getId());
+
+                if (!record.getStudent().getId().equals(currentUserId)) {
+                    System.out.println("   ❌ OWNERSHIP CHECK FAILED: Student " + currentUserId + " trying to pay penalty for student " + record.getStudent().getId());
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(Map.of("message", "You can only pay your own penalties"));
+                }
+                System.out.println("   ✅ OWNERSHIP CHECK PASSED");
+            } else {
+                System.out.println("   ✅ ADMIN/LIBRARIAN ACCESS - No ownership check needed");
+            }
+
+            String res = borrowService.payPenalty(borrowRecordId, payment.getAmount());
+            System.out.println("   ✅ PAYMENT SUCCESSFUL: " + res);
+            return ResponseEntity.ok(Map.of("message", res));
+        } catch (Exception ex) {
+            System.err.println("   ❌ PAYMENT ERROR: " + ex.getMessage());
+            ex.printStackTrace();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
+        }
     }
 
     // Waive a penalty (admin/librarian only)

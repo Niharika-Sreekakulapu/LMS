@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { searchBooks, createIssueRequest, getSubscriptionStatus, extendSubscription, getSubscriptionPackages } from '../../api/libraryApi';
+import { searchBooks, createIssueRequest, getSubscriptionStatus, extendSubscription } from '../../api/libraryApi';
 import { useAuth } from '../../hooks/useAuth';
 import type { Book } from '../../types/dto';
 
@@ -10,6 +10,8 @@ const StudentProMembership: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [requestingBookId, setRequestingBookId] = useState<number | null>(null);
+  const [requestingBook, setRequestingBook] = useState<Book | null>(null);
+  const [showRequestModal, setShowRequestModal] = useState(false);
   const [userSubscription, setUserSubscription] = useState<{
     membershipType: 'NORMAL' | 'PREMIUM';
     isPremium: boolean;
@@ -19,7 +21,7 @@ const StudentProMembership: React.FC = () => {
   } | null>(null);
   const [showExtensionModal, setShowExtensionModal] = useState(false);
   const [extendingSubscription, setExtendingSubscription] = useState(false);
-  const [subscriptionPackages, setSubscriptionPackages] = useState<string[]>([]);
+
 
   // Toast notification state
   const [toastMessage, setToastMessage] = useState<{type: 'success' | 'error', message: string} | null>(null);
@@ -81,18 +83,36 @@ const StudentProMembership: React.FC = () => {
     console.log('Book clicked:', book);
   };
 
-  const handleRequestBook = async (bookId: number) => {
+  const handleRequestBook = async (book: Book) => {
     // Check if user is premium
     if (!userSubscription?.isPremium) {
       showToast('error', 'Premium membership required to request premium books');
       return;
     }
 
-    setRequestingBookId(bookId);
-    try {
-      await createIssueRequest(bookId);
+    console.log('Opening request modal for book:', book.title);
+    console.log('User subscription:', userSubscription);
+    console.log('Setting modal states...');
+    setRequestingBook(book);
+    setShowRequestModal(true);
 
-      // Close modal immediately and refresh data
+    // Force a re-render check
+    setTimeout(() => {
+      console.log('Modal should be visible now. showRequestModal:', true, 'requestingBook:', book.title);
+    }, 100);
+  };
+
+  const confirmRequestBook = async () => {
+    if (!requestingBook) return;
+
+    setRequestingBookId(requestingBook.id);
+    setShowRequestModal(false);
+    setRequestingBook(null);
+
+    try {
+      await createIssueRequest(requestingBook.id);
+
+      // Refresh data
       loadPremiumBooks();
 
       // Show success toast
@@ -334,14 +354,15 @@ const StudentProMembership: React.FC = () => {
         {getAccessLevelBadge(book)}
       </div>
 
-      {/* Statistics Card */}
+        {/* Statistics Card */}
       <div style={{
         background: 'linear-gradient(145deg, #f8f9fa 0%, #ffffff 100%)',
         borderRadius: '12px',
         padding: '16px',
         border: '1px solid #e9ecef',
         marginBottom: '20px',
-        flexGrow: 1
+        flexGrow: 1,
+        minHeight: '70px'
       }}>
         <div style={{
           display: 'flex',
@@ -409,7 +430,7 @@ const StudentProMembership: React.FC = () => {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              handleRequestBook(book.id);
+              handleRequestBook(book);
             }}
             disabled={requestingBookId === book.id}
             style={{
@@ -1081,6 +1102,228 @@ const StudentProMembership: React.FC = () => {
                 }}
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Request Confirmation Modal */}
+      {showRequestModal && requestingBook && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 2000,
+          padding: '20px'
+        }}
+        onClick={(e) => e.stopPropagation()}>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            padding: '40px',
+            maxWidth: '500px',
+            width: '100%',
+            boxShadow: '0 25px 50px rgba(0,0,0,0.3)',
+            position: 'relative',
+            overflow: 'hidden'
+          }}>
+            {/* Header */}
+            <div style={{
+              textAlign: 'center',
+              marginBottom: '30px',
+              position: 'relative'
+            }}>
+              <div style={{
+                position: 'absolute',
+                top: '-30px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                width: '80px',
+                height: '80px',
+                background: 'linear-gradient(135deg, #FFD700, #FFA500)',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '2rem',
+                color: 'white',
+                boxShadow: '0 8px 25px rgba(255,215,0,0.4)'
+              }}>
+                ⭐
+              </div>
+              <h2 style={{
+                color: '#2A1F16',
+                margin: '20px 0 10px 0',
+                fontSize: '1.8rem',
+                fontWeight: '700'
+              }}>
+                Confirm Premium Book Request
+              </h2>
+              <p style={{
+                color: '#666',
+                fontSize: '1rem',
+                margin: '0'
+              }}>
+                Are you sure you want to request this premium book?
+              </p>
+            </div>
+
+            {/* Book Details */}
+            <div style={{
+              background: 'linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%)',
+              borderRadius: '12px',
+              padding: '20px',
+              marginBottom: '25px',
+              border: '1px solid #e9ecef'
+            }}>
+              <div style={{ textAlign: 'center', marginBottom: '15px' }}>
+                <div style={{
+                  width: '60px',
+                  height: '60px',
+                  background: 'linear-gradient(135deg, #FFD700, #FFA500)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  fontSize: '1.8rem',
+                  margin: '0 auto 10px auto'
+                }}>
+                  📚
+                </div>
+                <h3 style={{
+                  color: '#2A1F16',
+                  margin: '0 0 5px 0',
+                  fontSize: '1.4rem',
+                  fontWeight: '700'
+                }}>
+                  {requestingBook.title}
+                </h3>
+                <p style={{
+                  color: '#666',
+                  margin: '0',
+                  fontStyle: 'italic'
+                }}>
+                  by {requestingBook.author}
+                </p>
+              </div>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '15px',
+                fontSize: '0.9rem'
+              }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontWeight: '600', color: '#2A1F16' }}>
+                    {requestingBook.totalCopies}
+                  </div>
+                  <div style={{ color: '#666' }}>Total Copies</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{
+                    fontWeight: '600',
+                    color: (requestingBook.availableCopies || 0) > 0 ? '#2e7d32' : '#c62828'
+                  }}>
+                    {requestingBook.availableCopies}
+                  </div>
+                  <div style={{ color: '#666' }}>Available</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Benefits Reminder */}
+            <div style={{
+              background: 'linear-gradient(135deg, #fff8e1 0%, #fefae0 100%)',
+              borderRadius: '12px',
+              padding: '20px',
+              marginBottom: '25px',
+              border: '2px solid #fbbf24'
+            }}>
+              <h5 style={{
+                color: '#f57c00',
+                margin: '0 0 10px 0',
+                fontSize: '1rem',
+                fontWeight: '600'
+              }}>
+                🎉 Premium Benefits:
+              </h5>
+              <ul style={{
+                color: '#f57c00',
+                margin: '0',
+                paddingLeft: '20px',
+                fontSize: '0.9rem',
+                lineHeight: '1.5'
+              }}>
+                <li>Extended borrowing period (60 days)</li>
+                <li>Priority processing</li>
+                <li>No overdue fines</li>
+                <li>Access to exclusive premium content</li>
+              </ul>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'center'
+            }}>
+              <button
+                onClick={() => {
+                  setShowRequestModal(false);
+                  setRequestingBook(null);
+                }}
+                style={{
+                  padding: '12px 24px',
+                  background: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#5a6268';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#6c757d';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmRequestBook}
+                style={{
+                  padding: '12px 24px',
+                  background: 'linear-gradient(135deg, #FFD700, #FFA500)',
+                  color: '#2A1F16',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 15px rgba(255,215,0,0.3)',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(255,215,0,0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 15px rgba(255,215,0,0.3)';
+                }}
+              >
+                ⭐ Confirm Request
               </button>
             </div>
           </div>

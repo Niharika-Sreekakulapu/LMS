@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import client from '../../api/axiosClient';
 import type { BorrowHistory } from '../../types/dto';
+import Toast from '../../components/Toast';
 
 const StudentBorrows: React.FC = () => {
   const [borrows, setBorrows] = useState<BorrowHistory[]>([]);
@@ -50,6 +51,10 @@ const StudentBorrows: React.FC = () => {
     setTimeout(() => setToastMessage(null), 5000);
   };
 
+  const handleToastClose = () => {
+    setToastMessage(null);
+  };
+
 
 
   const formatExactDate = (dateString: string) => {
@@ -61,20 +66,26 @@ const StudentBorrows: React.FC = () => {
   };
 
   const getDaysUntilDue = (dueDate: string) => {
-    const due = new Date(dueDate);
+    // Use start of current day for consistency with backend
     const now = new Date();
-    const diffTime = due.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const due = new Date(dueDate);
+    const diffTime = due.getTime() - startOfToday.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
   };
 
   const getDaysOverdue = (dueDate: string, returnDate?: string) => {
     if (returnDate) return 0; // Already returned
 
-    const due = new Date(dueDate);
+    // Use start of current day for consistency with backend
     const now = new Date();
-    const diffTime = now.getTime() - due.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const due = new Date(dueDate);
+    const diffTime = startOfToday.getTime() - due.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     return Math.max(0, diffDays);
   };
 
@@ -82,64 +93,96 @@ const StudentBorrows: React.FC = () => {
     const daysUntilDue = getDaysUntilDue(borrow.dueDate);
     const daysOverdue = getDaysOverdue(borrow.dueDate, borrow.returnedAt);
 
-    if (borrow.status === 'RETURNED') {
+    // Priority: LOST > DAMAGED > LATE_RETURNED > RETURNED > OVERDUE > DUE SOON
+    const baseStyle = {
+      fontWeight: '600' as const,
+      padding: '12px 20px',
+      borderRadius: '25px',
+      fontSize: '0.9em',
+      display: 'inline-flex' as const,
+      alignItems: 'center' as const,
+      gap: '5px',
+      whiteSpace: 'nowrap' as const,
+      minWidth: '140px',
+      justifyContent: 'center' as const,
+    };
+
+    if (borrow.status === 'LOST') {
       return (
         <span
           style={{
-            color: '#2e7d32',
-            fontWeight: '600',
-            backgroundColor: '#e8f5e8',
-            border: '1px solid #4caf50',
-            padding: '12px 20px',
-            borderRadius: '25px',
-            fontSize: '0.9em',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '5px',
-            whiteSpace: 'nowrap',
+            ...baseStyle,
+            color: '#7c2d12',
+            backgroundColor: '#feefee',
+            border: '1px solid #f44336',
           }}
         >
-          RETURNED
+          ❌ LOST BOOK
+        </span>
+      );
+    } else if (borrow.status === 'DAMAGED') {
+      return (
+        <span
+          style={{
+            ...baseStyle,
+            color: '#e65100',
+            backgroundColor: '#fff3e0',
+            border: '1px solid #ff9800',
+          }}
+        >
+          🔧 DAMAGED
+        </span>
+      );
+    } else if (borrow.status === 'LATE_RETURNED') {
+      return (
+        <span
+          style={{
+            ...baseStyle,
+            color: '#f57c00',
+            backgroundColor: '#fff3e0',
+            border: '1px solid #ff9800',
+          }}
+        >
+          ⏰ LATE RETURN
+        </span>
+      );
+    } else if (borrow.status === 'RETURNED') {
+      return (
+        <span
+          style={{
+            ...baseStyle,
+            color: '#2e7d32',
+            backgroundColor: '#e8f5e8',
+            border: '1px solid #4caf50',
+          }}
+        >
+          ✅ RETURNED
         </span>
       );
     } else if (daysOverdue > 0) {
       return (
         <span
           style={{
+            ...baseStyle,
             color: '#c62828',
-            fontWeight: '600',
             backgroundColor: '#ffebee',
             border: '1px solid #f44336',
-            padding: '12px 20px',
-            borderRadius: '25px',
-            fontSize: '0.9em',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '5px',
-            whiteSpace: 'nowrap',
           }}
         >
-          {daysOverdue} DAYS OVERDUE
+          ⚠️ {daysOverdue} DAYS OVERDUE
         </span>
       );
     } else {
       return (
         <span
           style={{
+            ...baseStyle,
             color: '#ff9800',
-            fontWeight: '600',
             backgroundColor: '#fff3e0',
             border: '1px solid #ff5722',
-            padding: '12px 20px',
-            borderRadius: '25px',
-            fontSize: '0.9em',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '5px',
-            whiteSpace: 'nowrap',
           }}
         >
-          {daysUntilDue > 0 ? `Due in ${daysUntilDue} days` : 'Due Today'}
+          📅 {daysUntilDue > 0 ? `Due in ${daysUntilDue} days` : 'Due Today'}
         </span>
       );
     }
@@ -231,23 +274,11 @@ const StudentBorrows: React.FC = () => {
     >
       {/* Toast Notification */}
       {toastMessage && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '20px',
-            right: '20px',
-            background: toastMessage.type === 'success' ? '#d4edda' : '#f8d7da',
-            color: toastMessage.type === 'success' ? '#155724' : '#721c24',
-            padding: '12px 20px',
-            borderRadius: '8px',
-            border: `1px solid ${toastMessage.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            zIndex: 1000,
-            fontWeight: '500'
-          }}
-        >
-          {toastMessage.message}
-        </div>
+        <Toast
+          message={toastMessage.message}
+          type={toastMessage.type}
+          onClose={handleToastClose}
+        />
       )}
 
       {/* Header Section */}
@@ -419,7 +450,7 @@ const StudentBorrows: React.FC = () => {
                 fontWeight: 'bold',
                 color: '#2A1F16',
                 display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1fr 1.2fr 1.4fr',
+                gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1fr 1.4fr 1.8fr',
                 gap: '8px',
                 alignItems: 'center'
               }}>
@@ -429,8 +460,8 @@ const StudentBorrows: React.FC = () => {
                 <div>MRP</div>
                 <div>Borrowed</div>
                 <div>Due Date</div>
-                <div>Actions</div>
                 <div>Status</div>
+                <div>Actions</div>
               </div>
 
               {/* Table Body for Active Borrows */}
@@ -446,7 +477,7 @@ const StudentBorrows: React.FC = () => {
                         boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
                         border: '1px solid #e9ecef',
                         display: 'grid',
-                        gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1fr 1.2fr 1.4fr',
+                        gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1fr 1.4fr 1.8fr',
                         gap: '10px',
                         alignItems: 'center',
                         opacity: returningId === borrow.id ? 0.7 : 1,
@@ -486,12 +517,21 @@ const StudentBorrows: React.FC = () => {
                         {formatExactDate(borrow.dueDate)}
                       </div>
 
-                      <div>
+                      <div style={{ height: '40px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+                        {getStatusBadge(borrow)}
+                        {getDaysOverdue(borrow.dueDate, borrow.returnedAt) > 30 && (
+                          <div style={{ fontSize: '0.65rem', color: '#c62828', marginTop: '2px', textAlign: 'center' }}>
+                            Contact librarian
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ textAlign: 'center' }}>
                         <button
                           onClick={() => openReturnModal(borrow)}
                           disabled={getDaysOverdue(borrow.dueDate, borrow.returnedAt) > 30}
                           style={{
-                            background: '#28a745',
+                            background: '#965425ff',
                             color: 'white',
                             border: 'none',
                             borderRadius: '8px',
@@ -506,21 +546,12 @@ const StudentBorrows: React.FC = () => {
                           🔄 Return
                         </button>
                       </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                        {getStatusBadge(borrow)}
-                        {getDaysOverdue(borrow.dueDate, borrow.returnedAt) > 30 && (
-                          <div style={{ fontSize: '0.65rem', color: '#c62828', marginTop: '2px', textAlign: 'center' }}>
-                            Contact librarian
-                          </div>
-                        )}
-                      </div>
                     </div>
                   ))}
                 </div>
 
                 {/* Pagination Controls for Active Borrows */}
-                {filteredBorrows.length > itemsPerPage && (
+                {filteredBorrows.length > 0 && (
                   <div style={{
                     background: 'white',
                     padding: '20px',
@@ -689,7 +720,7 @@ const StudentBorrows: React.FC = () => {
                 </div>
 
                 {/* Pagination Controls for History */}
-                {filteredBorrows.length > itemsPerPage && (
+                {filteredBorrows.length > 0 && (
                   <div style={{
                     background: 'white',
                     padding: '20px',

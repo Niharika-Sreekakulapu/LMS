@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -29,13 +30,12 @@ public class SubscriptionController {
         User.MembershipType membershipType = subscriptionService.getEffectiveMembershipType(userId);
         boolean isPremium = subscriptionService.isUserPremium(userId);
 
-        Map<String, Object> status = Map.of(
-            "membershipType", membershipType,
-            "isPremium", isPremium,
-            "subscriptionPackage", user.getSubscriptionPackage(),
-            "subscriptionStart", user.getSubscriptionStart(),
-            "subscriptionEnd", user.getSubscriptionEnd()
-        );
+        Map<String, Object> status = new HashMap<>();
+        status.put("membershipType", membershipType);
+        status.put("isPremium", isPremium);
+        status.put("subscriptionPackage", user.getSubscriptionPackage());
+        status.put("subscriptionStart", user.getSubscriptionStart());
+        status.put("subscriptionEnd", user.getSubscriptionEnd());
 
         return ResponseEntity.ok(status);
     }

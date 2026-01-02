@@ -4,7 +4,7 @@ import { register } from "../api/authApi";
 import type { RegistrationRequest } from "../types/dto";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import libImage from "../assets/lib.webp";
+import loginImage from "../assets/login.jpg";
 
 type FieldErrors = Record<string, string>;
 
@@ -21,6 +21,7 @@ export default function LibrarianRegisterPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [idProofFile, setIdProofFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nav = useNavigate();
@@ -211,6 +212,42 @@ export default function LibrarianRegisterPage() {
           box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.1);
         }
 
+        /* Password field eye icon wrapper */
+        .password-wrapper {
+          position: relative;
+          width: 100%;
+        }
+
+        /* Ensure input inside wrapper has enough right padding to avoid overlap */
+        .password-wrapper .lr-input {
+          padding-right: 48px !important;
+        }
+
+        .password-toggle-btn {
+          position: absolute;
+          right: 8px;
+          top: 30%;
+          bottom: 40%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          cursor: pointer;
+          font-size: 1rem;
+          color: #666;
+          padding: 2px;
+          display: flex;
+          align-items: center;
+          justify-content: right;
+          width: 28px;
+          height: 28px;
+          border-radius: 4px;
+          transition: color 0.2s;
+        }
+
+        .password-toggle-btn:hover {
+          color: #4A3328;
+        }
+
         /* BUTTONS */
         .lr-upload-btn {
           width: 100%;
@@ -299,7 +336,7 @@ export default function LibrarianRegisterPage() {
         {/* LEFT: IMAGE */}
         <div
           className="lr-image-section"
-          style={{ backgroundImage: `url(${libImage})` }}
+          style={{ backgroundImage: `url(${loginImage})` }}
         >
           <div className="lr-image-overlay" />
         </div>
@@ -352,14 +389,24 @@ export default function LibrarianRegisterPage() {
 
               {/* Password */}
               <div className="lr-input-group">
-                <input
-                  className="lr-input"
-                  name="password"
-                  type="password"
-                  placeholder="Password"
-                  value={form.password}
-                  onChange={onChange}
-                />
+                <div className="password-wrapper">
+                  <input
+                    className="lr-input"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Password"
+                    value={form.password}
+                    onChange={onChange}
+                    style={{ paddingRight: '40px' }}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    <i className={showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'}></i>
+                  </button>
+                </div>
                 {errors.password && <p className="error-text">{errors.password}</p>}
               </div>
 

@@ -130,7 +130,7 @@ const EditBook: React.FC = () => {
     }}>
       <div style={{ width: "100%", maxWidth: "1200px" }}>
         <div style={{
-          background: "linear-gradient(145deg, #ffffff, #f8f9fa)",
+          background: "#F9F6F0",
           borderRadius: 20,
           boxShadow: "0 20px 40px rgba(0,0,0,0.1), 0 10px 20px rgba(0,0,0,0.05)",
           padding: "50px 60px",

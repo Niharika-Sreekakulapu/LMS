@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import ReactDOM from 'react-dom';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -10,21 +11,9 @@ export interface ToastProps {
 }
 
 const Toast: React.FC<ToastProps> = ({ message, type, duration = 5000, onClose }) => {
-  const [isVisible, setIsVisible] = useState(false);
+  console.log('🔔 Toast rendered:', { message, type, duration });
+  const [isVisible, setIsVisible] = useState(true); // Start visible immediately
   const [isRemoving, setIsRemoving] = useState(false);
-
-  useEffect(() => {
-    // Show the toast
-    setIsVisible(true);
-
-    // Auto-dismiss after duration
-    const timer = setTimeout(() => {
-      // eslint-disable-next-line react-hooks/immutability
-      handleClose();
-    }, duration);
-
-    return () => clearTimeout(timer);
-  }, [duration]);
 
   const handleClose = () => {
     setIsRemoving(true);
@@ -34,12 +23,21 @@ const Toast: React.FC<ToastProps> = ({ message, type, duration = 5000, onClose }
     }, 300); // Wait for exit animation
   };
 
+  useEffect(() => {
+    // Auto-dismiss after duration
+    const timer = setTimeout(() => {
+      handleClose();
+    }, duration);
+
+    return () => clearTimeout(timer);
+  }, [duration]);
+
   const getToastStyles = () => {
     const baseStyles: React.CSSProperties = {
-      position: 'fixed',
-      top: '20px',
-      right: '20px',
-      zIndex: 10000,
+    position: 'fixed',
+    top: '20px',
+    right: '20px',
+    zIndex: 2147483647,
       padding: '16px 20px',
       borderRadius: '12px',
       fontSize: '1rem',
@@ -50,10 +48,12 @@ const Toast: React.FC<ToastProps> = ({ message, type, duration = 5000, onClose }
       display: 'flex',
       alignItems: 'center',
       gap: '12px',
-      boxShadow: '0 12px 32px rgba(0,0,0,0.15)',
-      backdropFilter: 'blur(10px)',
+      boxShadow: '0 20px 60px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1)',
+      backdropFilter: 'blur(20px)',
       transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-      border: '1px solid rgba(255,255,255,0.2)',
+      border: '2px solid rgba(255,255,255,0.3)',
+      background: 'rgba(0,0,0,0.85)',
+      color: 'white',
     };
 
     const typeStyles = {
@@ -109,8 +109,10 @@ const Toast: React.FC<ToastProps> = ({ message, type, duration = 5000, onClose }
     }
   };
 
-  return (
+  // Use React Portal to render toast directly to document body
+  const toastElement = (
     <div
+      className="toast-overlay"
       style={getToastStyles()}
       onClick={handleClose}
       onMouseEnter={(e) => {
@@ -149,6 +151,9 @@ const Toast: React.FC<ToastProps> = ({ message, type, duration = 5000, onClose }
       </button>
     </div>
   );
+
+  // Render to document body using portal to escape all stacking contexts
+  return ReactDOM.createPortal(toastElement, document.body);
 };
 
 export default Toast;

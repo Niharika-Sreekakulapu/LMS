@@ -1,3 +1,7 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { getMyIssueRequests, getMyAcquisitionRequests, createAcquisitionRequest } from '../../api/libraryApi';
+import Toast from '../../components/Toast';
+
 // Define the IssueRequest type matching backend BookRequestResponseDTO
 interface IssueRequest {
   id: number;
@@ -17,9 +21,6 @@ interface IssueRequest {
   reason?: string;
   issuedRecordId?: number;
 }
-
-import React, { useState, useEffect } from 'react';
-import { getMyIssueRequests, getMyAcquisitionRequests, createAcquisitionRequest } from '../../api/libraryApi';
 
 // Define Acquisition Request types
 interface AcquisitionRequest {
@@ -52,8 +53,9 @@ const StudentRequests: React.FC = () => {
   const [issueRequests, setIssueRequests] = useState<IssueRequest[]>([]);
   const [acquisitionRequests, setAcquisitionRequests] = useState<AcquisitionRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [showForm, setShowForm] = useState(false);
+const [statusFilter, setStatusFilter] = useState<string>('ALL');
+const [searchTerm, setSearchTerm] = useState<string>('');
+const [showForm, setShowForm] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -72,14 +74,7 @@ const StudentRequests: React.FC = () => {
   // Toast notification state
   const [toastMessage, setToastMessage] = useState<{type: 'success' | 'error', message: string} | null>(null);
 
-  useEffect(() => {
-    loadAllRequests();
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(loadAllRequests, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const loadAllRequests = async () => {
+  const loadAllRequests = useCallback(async () => {
     try {
       setLoading(true);
       const [issueResponse, acquisitionResponse] = await Promise.all([
@@ -94,7 +89,14 @@ const StudentRequests: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadAllRequests();
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(loadAllRequests, 30000);
+    return () => clearInterval(interval);
+  }, [loadAllRequests]);
 
   const handleSubmitAcquisition = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,12 +139,12 @@ const StudentRequests: React.FC = () => {
     } catch (error: unknown) {
       console.error('Error submitting acquisition request:', error);
       // Check if it's the "book already exists" error
-      const err = error as any; // Type assertion for error handling
-      const errorMessage = err?.response?.data?.message || err?.message || '';
+      const axiosError = error as { response?: { data?: { message?: string } }; message?: string };
+      const errorMessage = axiosError?.response?.data?.message || axiosError?.message || '';
       if (errorMessage.includes('already exists')) {
         showToast('error', 'Book already exists in the library collection. You cannot request an acquisition for a book that is already available.');
       } else {
-        showToast('error', err?.response?.data?.message || 'Failed to submit acquisition request');
+        showToast('error', axiosError?.response?.data?.message || 'Failed to submit acquisition request');
       }
     }
   };
@@ -150,6 +152,10 @@ const StudentRequests: React.FC = () => {
   const showToast = (type: 'success' | 'error', message: string) => {
     setToastMessage({ type, message });
     setTimeout(() => setToastMessage(null), 5000);
+  };
+
+  const handleToastClose = () => {
+    setToastMessage(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -271,8 +277,17 @@ const StudentRequests: React.FC = () => {
   // Get current requests based on active tab
   const currentRequests = activeTab === 'issue' ? issueRequests : acquisitionRequests;
   const filteredRequests = currentRequests.filter(request => {
-    if (statusFilter === 'ALL') return true;
-    return request.status === statusFilter;
+    const matchesStatus = statusFilter === 'ALL' || request.status === statusFilter;
+    let matchesSearch = true;
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase().trim();
+      if (activeTab === 'issue') {
+        matchesSearch = (request as IssueRequest).bookTitle?.toLowerCase().includes(searchLower) ?? false;
+      } else {
+        matchesSearch = (request as AcquisitionRequest).bookName?.toLowerCase().includes(searchLower) ?? false;
+      }
+    }
+    return matchesStatus && matchesSearch;
   });
 
   // Pagination calculations
@@ -284,7 +299,7 @@ const StudentRequests: React.FC = () => {
   // Reset to page 1 when filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, activeTab]);
+  }, [statusFilter, activeTab, searchTerm]);
 
   // Stats calculation for current tab
   const totalRequests = currentRequests.length;
@@ -325,23 +340,11 @@ const StudentRequests: React.FC = () => {
     >
       {/* Toast Notification */}
       {toastMessage && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '20px',
-            right: '20px',
-            background: toastMessage.type === 'success' ? '#d4edda' : '#f8d7da',
-            color: toastMessage.type === 'success' ? '#155724' : '#721c24',
-            padding: '12px 20px',
-            borderRadius: '8px',
-            border: `1px solid ${toastMessage.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            zIndex: 1000,
-            fontWeight: '500'
-          }}
-        >
-          {toastMessage.message}
-        </div>
+        <Toast
+          message={toastMessage.message}
+          type={toastMessage.type}
+          onClose={handleToastClose}
+        />
       )}
 
       {/* Header Section */}
@@ -708,15 +711,15 @@ const StudentRequests: React.FC = () => {
         border: '1px solid #E8D1A7',
         boxShadow: '0 4px 15px rgba(154,91,52,0.1)',
       }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'auto 1fr',
-          gap: '20px',
-          alignItems: 'center'
-        }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           {/* Status Filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '0.95rem', fontWeight: '600', color: '#2A1F16' }}>
+            <span style={{ 
+              fontSize: '0.95rem', 
+              fontWeight: '600', 
+              color: '#2A1F16',
+              whiteSpace: 'nowrap' // This line prevents the text wrapping
+            }}>
               Status Filter:
             </span>
             <select
@@ -739,6 +742,29 @@ const StudentRequests: React.FC = () => {
               <option value="APPROVED">✅ Approved</option>
               <option value="REJECTED">❌ Rejected</option>
             </select>
+          </div>
+          
+          {/* Search Bar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '0.95rem', fontWeight: '600', color: '#2A1F16' }}>
+              Search:
+            </span>
+            <input
+              type="text"
+              placeholder="Search by book name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                padding: '10px 12px',
+                border: '2px solid #ddd',
+                borderRadius: '8px',
+                background: 'white',
+                fontSize: '0.9rem',
+                fontWeight: '500',
+                color: '#2A1F16',
+                minWidth: '200px',
+              }}
+            />
           </div>
         </div>
       </div>
@@ -859,7 +885,7 @@ const StudentRequests: React.FC = () => {
               </div>
 
             {/* Pagination Controls */}
-            {totalPages > 1 && (
+            {totalPages > 0 && (
               <div style={{
                 background: 'white',
                 padding: '20px',
@@ -1042,7 +1068,7 @@ const StudentRequests: React.FC = () => {
             </div>
 
             {/* Pagination Controls */}
-            {totalPages > 1 && (
+            {totalPages > 0 && (
               <div style={{
                 background: 'white',
                 padding: '20px',

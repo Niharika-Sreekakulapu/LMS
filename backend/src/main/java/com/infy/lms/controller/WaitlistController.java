@@ -15,6 +15,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/waitlist")
@@ -31,22 +32,31 @@ public class WaitlistController {
      */
     @PostMapping("/join/{bookId}")
     @PreAuthorize("hasRole('STUDENT')")
-    public ResponseEntity<BookWaitlistDto> joinWaitlist(@PathVariable Long bookId) {
-        Long userId = securityService.getCurrentUserId();
-        if (userId == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+    public ResponseEntity<?> joinWaitlist(@PathVariable Long bookId) {
+        try {
+            Long userId = securityService.getCurrentUserId();
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            User student = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
+            Book book = bookRepository.findById(bookId).orElseThrow(() -> new RuntimeException("Book not found"));
+
+            // Check if book is available
+            if (book.getAvailableCopies() > 0) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("message", "Book is currently available - no need to join waitlist"));
+            }
+
+            BookWaitlistDto result = waitlistService.joinWaitlist(student, book);
+            return ResponseEntity.ok(result);
+        } catch (RuntimeException e) {
+            if (e.getMessage().contains("already in the waitlist")) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("message", "You are already in the waitlist for this book"));
+            }
+            throw e; // Re-throw other exceptions
         }
-
-        User student = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
-        Book book = bookRepository.findById(bookId).orElseThrow(() -> new RuntimeException("Book not found"));
-
-        // Check if book is available
-        if (book.getAvailableCopies() > 0) {
-            throw new RuntimeException("Book is currently available - no need to join waitlist");
-        }
-
-        BookWaitlistDto result = waitlistService.joinWaitlist(student, book);
-        return ResponseEntity.ok(result);
     }
 
     /**
@@ -114,6 +124,16 @@ public class WaitlistController {
         Book book = bookRepository.findById(bookId).orElseThrow(() -> new RuntimeException("Book not found"));
         List<BookWaitlistDto> waitlist = waitlistService.getBookWaitlist(book);
         return ResponseEntity.ok(waitlist);
+    }
+
+    /**
+     * Get all active waitlists grouped by book (Admin/Librarian)
+     */
+    @GetMapping("/all")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LIBRARIAN')")
+    public ResponseEntity<Map<Long, List<BookWaitlistDto>>> getAllActiveWaitlists() {
+        Map<Long, List<BookWaitlistDto>> allWaitlists = waitlistService.getAllActiveWaitlists();
+        return ResponseEntity.ok(allWaitlists);
     }
 
     /**

@@ -403,9 +403,9 @@ export default function RequestsPage() {
                           <th style={{ padding: "12px", textAlign: "center", fontWeight: "700", color: "#374151", fontSize: "16px" }}>ID</th>
                           <th style={{ padding: "12px", textAlign: "left", fontWeight: "700", color: "#374151", fontSize: "16px" }}>👤 Student</th>
                           <th style={{ padding: "12px", textAlign: "left", fontWeight: "700", color: "#374151", fontSize: "16px" }}>📚 Book</th>
-                          <th style={{ padding: "12px", textAlign: "center", fontWeight: "700", color: "#374151", fontSize: "16px" }}>📊 Status</th>
+                          <th style={{ padding: "12px", textAlign: "center", fontWeight: "700", color: "#374151", fontSize: "16px" }}>� Actions</th>
                           <th style={{ padding: "12px", textAlign: "center", fontWeight: "700", color: "#374151", fontSize: "16px" }}>📅 Request Date</th>
-                          <th style={{ padding: "12px", textAlign: "center", fontWeight: "700", color: "#374151", fontSize: "16px" }}>🔧 Actions</th>
+                          <th style={{ padding: "12px", textAlign: "center", fontWeight: "700", color: "#374151", fontSize: "16px" }}>� Status</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -422,29 +422,6 @@ export default function RequestsPage() {
                                   by {req.bookAuthor}
                                 </div>
                               )}
-                            </td>
-                            <td style={{ padding: "12px", textAlign: "center" }}>
-                              <span style={{
-                                padding: "6px 12px",
-                                borderRadius: "20px",
-                                fontSize: "14px",
-                                fontWeight: "700",
-                                textTransform: "uppercase",
-                                backgroundColor:
-                                  req.status === 'APPROVED' ? '#dcfce7' :
-                                  req.status === 'REJECTED' ? '#fef2f2' :
-                                  req.status === 'PENDING' ? '#fef3c7' : '#f3f4f6',
-                                color:
-                                  req.status === 'APPROVED' ? '#166534' :
-                                  req.status === 'REJECTED' ? '#dc2626' :
-                                  req.status === 'PENDING' ? '#92400e' : '#374151',
-                                whiteSpace: "nowrap"
-                              }}>
-                                {req.status || 'UNKNOWN'}
-                              </span>
-                            </td>
-                            <td style={{ padding: "12px", textAlign: "center", fontSize: "16px", color: "#6b7280" }}>
-                              {req.requestedAt ? new Date(req.requestedAt).toLocaleDateString('en-IN') : 'N/A'}
                             </td>
                             <td style={{ padding: "12px", textAlign: "center" }}>
                               {req.status === 'PENDING' && (
@@ -487,6 +464,29 @@ export default function RequestsPage() {
                                 </span>
                               )}
                             </td>
+                            <td style={{ padding: "12px", textAlign: "center", fontSize: "16px", color: "#6b7280" }}>
+                              {req.requestedAt ? new Date(req.requestedAt).toLocaleDateString('en-IN') : 'N/A'}
+                            </td>
+                            <td style={{ padding: "12px", textAlign: "center" }}>
+                              <span style={{
+                                padding: "6px 12px",
+                                borderRadius: "20px",
+                                fontSize: "14px",
+                                fontWeight: "700",
+                                textTransform: "uppercase",
+                                backgroundColor:
+                                  req.status === 'APPROVED' ? '#dcfce7' :
+                                  req.status === 'REJECTED' ? '#fef2f2' :
+                                  req.status === 'PENDING' ? '#fef3c7' : '#f3f4f6',
+                                color:
+                                  req.status === 'APPROVED' ? '#166534' :
+                                  req.status === 'REJECTED' ? '#dc2626' :
+                                  req.status === 'PENDING' ? '#92400e' : '#374151',
+                                whiteSpace: "nowrap"
+                              }}>
+                                {req.status || 'UNKNOWN'}
+                              </span>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -494,7 +494,7 @@ export default function RequestsPage() {
                   </div>
 
                   {/* Pagination */}
-                  {totalPages > 1 && (
+                  {totalPages > 0 && (
                     <div style={{
                       display: "flex",
                       justifyContent: "space-between",
@@ -510,7 +510,7 @@ export default function RequestsPage() {
                       </div>
                       <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                         <button
-                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          onClick={() => goToPage(currentPage - 1)}
                           disabled={currentPage === 1}
                           style={{
                             padding: "8px 12px",
@@ -540,7 +540,7 @@ export default function RequestsPage() {
                             return (
                               <button
                                 key={pageNum}
-                                onClick={() => setCurrentPage(pageNum)}
+                                onClick={() => goToPage(pageNum)}
                                 style={{
                                   padding: "8px 12px",
                                   border: "1px solid #d1d5db",
@@ -559,7 +559,7 @@ export default function RequestsPage() {
                           })}
                         </div>
                         <button
-                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          onClick={() => goToPage(currentPage + 1)}
                           disabled={currentPage === totalPages}
                           style={{
                             padding: "8px 12px",

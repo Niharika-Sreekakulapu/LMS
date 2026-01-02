@@ -2,10 +2,13 @@ package com.infy.lms.service;
 
 import com.infy.lms.dto.BookReservationDto;
 import com.infy.lms.dto.BookWaitlistDto;
+import com.infy.lms.dto.BorrowRequestDTO;
+import com.infy.lms.enums.BorrowStatus;
 import com.infy.lms.model.*;
 import com.infy.lms.repository.BookReservationRepository;
 import com.infy.lms.repository.BookWaitlistRepository;
 import com.infy.lms.repository.BorrowRecordRepository;
+import com.infy.lms.service.BorrowService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,20 +31,49 @@ public class WaitlistService {
 
     // Priority calculation constants (configurable via admin settings later)
     private static final BigDecimal WAITING_TIME_WEIGHT = new BigDecimal("1.0");
-    private static final BigDecimal COURSE_URGENCY_WEIGHT = new BigDecimal("15.0");
-    private static final BigDecimal LATE_RETURN_PENALTY = new BigDecimal("-5.0");
     private static final BigDecimal MEMBERSHIP_BONUS = new BigDecimal("8.0");
+    private static final BigDecimal LATE_RETURN_PENALTY = new BigDecimal("-3.0");
+    private static final BigDecimal DAMAGED_RETURN_PENALTY = new BigDecimal("-8.0");
+    private static final BigDecimal LOST_RETURN_PENALTY = new BigDecimal("-15.0");
 
     /**
      * Join the waitlist for an unavailable book
      */
     @Transactional
     public BookWaitlistDto joinWaitlist(User student, Book book) {
-        // Check if already in waitlist
-        Optional<BookWaitlist> existing = waitlistRepository.findByStudentAndBookAndIsActiveTrue(student, book);
-        if (existing.isPresent()) {
+        System.out.println("🔍 WAITLIST JOIN: Starting joinWaitlist for student '" + student.getName() + "' and book '" + book.getTitle() + "'");
+
+        // Check if already in active waitlist
+        Optional<BookWaitlist> existingActive = waitlistRepository.findByStudentAndBookAndIsActiveTrue(student, book);
+        if (existingActive.isPresent()) {
+            System.out.println("❌ WAITLIST JOIN: Student is already in active waitlist for this book");
             throw new RuntimeException("Student is already in the waitlist for this book");
         }
+
+        // Check if there's an inactive entry for this student-book combination
+        // If so, we should reactivate it instead of creating a new one
+        List<BookWaitlist> allEntriesForStudentBook = waitlistRepository.findByStudentAndBook(student, book);
+        Optional<BookWaitlist> inactiveEntry = allEntriesForStudentBook.stream()
+                .filter(entry -> !entry.getIsActive())
+                .findFirst();
+
+        if (inactiveEntry.isPresent()) {
+            // Reactivate the existing entry
+            BookWaitlist entry = inactiveEntry.get();
+            entry.setIsActive(true);
+            entry.setJoinedAt(Instant.now()); // Reset join time
+            calculateAndUpdatePriority(entry);
+
+            System.out.println("🔄 WAITLIST JOIN: Reactivating existing waitlist entry");
+
+            BookWaitlist saved = waitlistRepository.save(entry);
+            updateQueuePositions(book);
+
+            System.out.println("✅ WAITLIST JOIN: Successfully reactivated waitlist entry with ID " + saved.getId());
+            return convertToDto(saved);
+        }
+
+        System.out.println("✅ WAITLIST JOIN: Creating new waitlist entry");
 
         // Create new waitlist entry
         BookWaitlist waitlistEntry = BookWaitlist.builder()
@@ -54,11 +86,75 @@ public class WaitlistService {
         // Calculate initial priority
         calculateAndUpdatePriority(waitlistEntry);
 
+        System.out.println("💾 WAITLIST JOIN: Saving waitlist entry");
+
         // Save and update queue positions
         BookWaitlist saved = waitlistRepository.save(waitlistEntry);
         updateQueuePositions(book);
 
+        System.out.println("✅ WAITLIST JOIN: Successfully joined waitlist with ID " + saved.getId());
+
         return convertToDto(saved);
+    }
+
+    /**
+     * Get all active waitlists grouped by book (admin/librarian view)
+     */
+    public java.util.Map<Long, List<BookWaitlistDto>> getAllActiveWaitlists() {
+        List<BookWaitlist> allEntries = waitlistRepository.findByIsActiveTrue();
+
+        // Update waiting days and priority for fresh data
+        allEntries.forEach(entry -> {
+            entry.updateWaitingDays();
+            calculateAndUpdatePriority(entry);
+        });
+
+        // Save updated entries
+        if (!allEntries.isEmpty()) {
+            waitlistRepository.saveAll(allEntries);
+        }
+
+        return allEntries.stream()
+                .collect(Collectors.groupingBy(
+                        entry -> entry.getBook().getId(),
+                        Collectors.mapping(this::convertToDto, Collectors.toList())
+                ));
+    }
+
+    /**
+     * Get waitlist position and details for a student-book combination
+     */
+    public BookWaitlistDto getWaitlistPosition(User student, Book book) {
+        Optional<BookWaitlist> waitlistEntry = waitlistRepository.findByStudentAndBookAndIsActiveTrue(student, book);
+        return waitlistEntry.map(this::convertToDto).orElse(null);
+    }
+
+    /**
+     * Get all waitlist entries for a student
+     */
+    public List<BookWaitlistDto> getStudentWaitlist(User student) {
+        List<BookWaitlist> entries = waitlistRepository.findByStudentAndIsActiveTrue(student);
+
+        // Update waiting days and priority for fresh data
+        entries.forEach(entry -> {
+            entry.updateWaitingDays();
+            calculateAndUpdatePriority(entry);
+        });
+
+        // Save updated entries
+        if (!entries.isEmpty()) {
+            waitlistRepository.saveAll(entries);
+        }
+
+        return entries.stream().map(this::convertToDto).collect(Collectors.toList());
+    }
+
+    /**
+     * Get waitlist for a book (admin/librarian view)
+     */
+    public List<BookWaitlistDto> getBookWaitlist(Book book) {
+        List<BookWaitlist> entries = waitlistRepository.findActiveWaitlistForBook(book);
+        return entries.stream().map(this::convertToDto).collect(Collectors.toList());
     }
 
     /**
@@ -76,59 +172,31 @@ public class WaitlistService {
     }
 
     /**
-     * Get waitlist position and details for a student-book combination
-     */
-    public BookWaitlistDto getWaitlistPosition(User student, Book book) {
-        Optional<BookWaitlist> waitlistEntry = waitlistRepository.findByStudentAndBookAndIsActiveTrue(student, book);
-        return waitlistEntry.map(this::convertToDto).orElse(null);
-    }
-
-    /**
-     * Get all waitlist entries for a student
-     */
-    public List<BookWaitlistDto> getStudentWaitlist(User student) {
-        List<BookWaitlist> entries = waitlistRepository.findByStudentAndIsActiveTrue(student);
-        return entries.stream().map(this::convertToDto).collect(Collectors.toList());
-    }
-
-    /**
-     * Get waitlist for a book (admin/librarian view)
-     */
-    public List<BookWaitlistDto> getBookWaitlist(Book book) {
-        List<BookWaitlist> entries = waitlistRepository.findActiveWaitlistForBook(book);
-        return entries.stream().map(this::convertToDto).collect(Collectors.toList());
-    }
-
-    /**
-     * Handle book return - auto-allocate to highest priority student
+     * Handle book return - immediately issue to highest priority student
      */
     @Transactional
-    public void handleBookReturn(Book book) {
+    public User handleBookReturn(Book book) {
         // Find highest priority student in waitlist
         List<BookWaitlist> waitlist = waitlistRepository.findActiveWaitlistForBook(book);
 
         if (!waitlist.isEmpty()) {
             BookWaitlist highestPriority = waitlist.get(0);
+            User student = highestPriority.getStudent();
 
-            // Create reservation for the student
-            BookReservation reservation = BookReservation.builder()
-                    .student(highestPriority.getStudent())
-                    .book(book)
-                    .reservedAt(Instant.now())
-                    .expiresAt(Instant.now().plus(24, ChronoUnit.HOURS)) // 24 hours to collect
-                    .status(BookReservation.ReservationStatus.ACTIVE)
-                    .notificationSent(false)
-                    .build();
-
-            reservationRepository.save(reservation);
-
-            // Remove student from waitlist
+            // Remove student from waitlist (they will get the book issued)
             highestPriority.setIsActive(false);
             waitlistRepository.save(highestPriority);
 
             // Update queue positions for remaining students
             updateQueuePositions(book);
+
+            System.out.println("✅ WAITLIST ALLOCATION: Book '" + book.getTitle() +
+                             "' will be issued to student '" + student.getName() + "' from waitlist");
+
+            return student; // Return the student who should get the book
         }
+
+        return null; // No one in waitlist
     }
 
     /**
@@ -166,8 +234,13 @@ public class WaitlistService {
     /**
      * Calculate and update priority score for a waitlist entry
      */
-    private void calculateAndUpdatePriority(BookWaitlist waitlistEntry) {
+    public void calculateAndUpdatePriority(BookWaitlist waitlistEntry) {
         User student = waitlistEntry.getStudent();
+
+        // Debug logging
+        System.out.println("🔍 PRIORITY CALCULATION for student: " + student.getName() + " (ID: " + student.getId() + ")");
+        System.out.println("   Student role: " + student.getRole());
+        System.out.println("   Student membership_type: " + student.getMembershipType());
 
         // Update waiting days
         waitlistEntry.updateWaitingDays();
@@ -175,60 +248,70 @@ public class WaitlistService {
         // Calculate priority components
         BigDecimal waitingScore = WAITING_TIME_WEIGHT.multiply(BigDecimal.valueOf(waitlistEntry.getWaitingDays()));
 
-        // Course urgency bonus (simplified - would need course/year info)
-        BigDecimal courseUrgency = calculateCourseUrgencyBonus(student);
-
-        // Late return penalty
-        BigDecimal latePenalty = calculateLateReturnPenalty(student);
+        // Return history penalty (includes late, lost, damaged returns)
+        BigDecimal returnHistoryPenalty = calculateReturnHistoryPenalty(student);
 
         // Membership bonus
         BigDecimal membershipBonus = calculateMembershipBonus(student);
 
-        // Total priority score
+        // Total priority score (removed course urgency bonus as requested)
         BigDecimal totalScore = waitingScore
-                .add(courseUrgency)
-                .add(latePenalty)
+                .add(returnHistoryPenalty)
                 .add(membershipBonus);
+
+        System.out.println("   📊 SCORE BREAKDOWN:");
+        System.out.println("      Waiting Score (" + waitlistEntry.getWaitingDays() + " days × 1.0): " + waitingScore);
+        System.out.println("      Return History Penalty: " + returnHistoryPenalty);
+        System.out.println("      Membership Bonus: " + membershipBonus);
+        System.out.println("      TOTAL SCORE: " + totalScore);
 
         // Update the entry
         waitlistEntry.setPriorityScore(totalScore);
-        waitlistEntry.setCourseUrgencyBonus(courseUrgency);
-        waitlistEntry.setLateReturnPenalty(latePenalty);
+        waitlistEntry.setCourseUrgencyBonus(BigDecimal.ZERO); // Removed course urgency bonus
+        waitlistEntry.setLateReturnPenalty(returnHistoryPenalty); // Now includes all return penalties
         waitlistEntry.setMembershipBonus(membershipBonus);
         waitlistEntry.setLastUpdated(Instant.now());
     }
 
     /**
-     * Calculate course urgency bonus (would need student profile/course data)
+     * Calculate return history penalty (includes late, lost, damaged returns)
      */
-    private BigDecimal calculateCourseUrgencyBonus(User student) {
-        // Simplified logic - in real implementation, this would check:
-        // - Student year (final year = higher priority)
-        // - Course type (core subjects = higher priority)
-        // - Assignment deadlines, exam schedules, etc.
+    private BigDecimal calculateReturnHistoryPenalty(User student) {
+        List<BorrowRecord> allBorrows = borrowRecordRepository.findByStudent(student);
 
-        // For now, give basic bonus based on role or other criteria
-        if (student.getRole() != null && student.getRole().toString().contains("PREMIUM")) {
-            return COURSE_URGENCY_WEIGHT.multiply(new BigDecimal("0.5"));
+        BigDecimal totalPenalty = BigDecimal.ZERO;
+
+        // Count different types of problematic returns
+        long lateReturns = 0;
+        long damagedReturns = 0;
+        long lostReturns = 0;
+
+        for (BorrowRecord record : allBorrows) {
+            if (record.getReturnedAt() != null) {
+                // Check return status based on borrow record status
+                BorrowStatus status = record.getStatus();
+                if (status == BorrowStatus.LATE_RETURNED) {
+                    lateReturns++;
+                } else if (status == BorrowStatus.DAMAGED) {
+                    damagedReturns++;
+                } else if (status == BorrowStatus.LOST) {
+                    lostReturns++;
+                }
+            }
         }
 
-        return BigDecimal.ZERO;
-    }
+        System.out.println("   🔍 RETURN HISTORY: Late=" + lateReturns + ", Damaged=" + damagedReturns + ", Lost=" + lostReturns);
 
-    /**
-     * Calculate late return penalty
-     */
-    private BigDecimal calculateLateReturnPenalty(User student) {
-        // Count recent late returns
-        List<BorrowRecord> recentBorrows = borrowRecordRepository.findByStudent(student);
+        // Apply penalties with different weights
+        totalPenalty = totalPenalty.add(LATE_RETURN_PENALTY.multiply(BigDecimal.valueOf(Math.min(lateReturns, 5))));
+        totalPenalty = totalPenalty.add(DAMAGED_RETURN_PENALTY.multiply(BigDecimal.valueOf(Math.min(damagedReturns, 3))));
+        totalPenalty = totalPenalty.add(LOST_RETURN_PENALTY.multiply(BigDecimal.valueOf(Math.min(lostReturns, 2))));
 
-        long lateReturns = recentBorrows.stream()
-                .filter(record -> record.getReturnedAt() != null &&
-                        record.getReturnedAt().isAfter(record.getDueDate()))
-                .count();
+        System.out.println("   💰 RETURN PENALTIES: Late(" + LATE_RETURN_PENALTY + "×" + Math.min(lateReturns, 5) + ") + Damaged(" +
+                          DAMAGED_RETURN_PENALTY + "×" + Math.min(damagedReturns, 3) + ") + Lost(" +
+                          LOST_RETURN_PENALTY + "×" + Math.min(lostReturns, 2) + ") = " + totalPenalty);
 
-        // Penalty increases with more late returns
-        return LATE_RETURN_PENALTY.multiply(BigDecimal.valueOf(Math.min(lateReturns, 5)));
+        return totalPenalty;
     }
 
     /**
@@ -236,10 +319,12 @@ public class WaitlistService {
      */
     private BigDecimal calculateMembershipBonus(User student) {
         // Premium members get priority bonus
-        if (student.getRole() != null && student.getRole().toString().contains("PREMIUM")) {
+        System.out.println("   🔍 MEMBERSHIP BONUS CHECK: membership_type = " + student.getMembershipType());
+        if (student.getMembershipType() != null && student.getMembershipType().toString().contains("PREMIUM")) {
+            System.out.println("   ✅ MEMBERSHIP BONUS GRANTED: " + MEMBERSHIP_BONUS);
             return MEMBERSHIP_BONUS;
         }
-
+        System.out.println("   ❌ MEMBERSHIP BONUS DENIED");
         return BigDecimal.ZERO;
     }
 
@@ -310,7 +395,7 @@ public class WaitlistService {
 
         if (waitlist.getLateReturnPenalty().compareTo(BigDecimal.ZERO) < 0) {
             if (reason.length() > 0) reason.append(", ");
-            reason.append("Late return penalty (").append(waitlist.getLateReturnPenalty()).append(")");
+            reason.append("Return history penalty (").append(waitlist.getLateReturnPenalty()).append(")");
         }
 
         return reason.length() > 0 ? reason.toString() : "Standard priority";

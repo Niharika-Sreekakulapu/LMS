@@ -20,4 +20,5 @@ public class PenaltyDTO {
     private BigDecimal penaltyAmount;
     private BorrowRecord.PenaltyType penaltyType;
     private BorrowRecord.PenaltyStatus penaltyStatus;
+    private Long daysOverdue;
 }

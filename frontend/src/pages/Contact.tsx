@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 
+
 export default function Contact() {
   const [formData, setFormData] = useState({
     name: "",
@@ -257,39 +258,71 @@ export default function Contact() {
                     />
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    style={{
-                      width: "100%",
-                      background: loading ? "#ccc" : "#3A2618", // Dark brown button
-                      color: "white",
-                      border: "none",
-                      padding: "16px 30px",
-                      borderRadius: "50px", // Pill shape
-                      fontSize: "1rem",
-                      fontWeight: "500",
-                      cursor: loading ? "not-allowed" : "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "10px",
-                      transition: "transform 0.2s, background 0.2s",
-                      boxShadow: "0 4px 14px rgba(58, 38, 24, 0.2)",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!loading) {
-                        e.currentTarget.style.transform = "translateY(-2px)";
-                        e.currentTarget.style.backgroundColor = "#2C1810";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = "translateY(0)";
+                  <div style={{ display: "flex", gap: "12px", marginBottom: "20px" }}>
+                    <button
+                      onClick={() => window.location.href = "/"}
+                      style={{
+                        flex: 1,
+                        background: "transparent",
+                        color: "#3A2618",
+                        border: "2px solid #3A2618",
+                        padding: "14px 20px",
+                        borderRadius: "25px",
+                        fontSize: "0.95rem",
+                        fontWeight: "600",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        transition: "all 0.2s"
+                      }}
+                      onMouseEnter={(e) => {
                         e.currentTarget.style.backgroundColor = "#3A2618";
-                    }}
-                  >
-                    {loading ? "Sending..." : "Send Message"}
-                  </button>
+                        e.currentTarget.style.color = "white";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = "transparent";
+                        e.currentTarget.style.color = "#3A2618";
+                      }}
+                    >
+                      🏠 Home
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      style={{
+                        flex: 2,
+                        background: loading ? "#ccc" : "#3A2618", // Dark brown button
+                        color: "white",
+                        border: "none",
+                        padding: "14px 20px",
+                        borderRadius: "25px", // Pill shape
+                        fontSize: "0.95rem",
+                        fontWeight: "600",
+                        cursor: loading ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        transition: "transform 0.2s, background 0.2s",
+                        boxShadow: "0 4px 14px rgba(58, 38, 24, 0.2)",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!loading) {
+                          e.currentTarget.style.transform = "translateY(-2px)";
+                          e.currentTarget.style.backgroundColor = "#2C1810";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = "translateY(0)";
+                          e.currentTarget.style.backgroundColor = "#3A2618";
+                      }}
+                    >
+                      {loading ? "Sending..." : "📤 Send Message"}
+                    </button>
+                  </div>
                 </form>
               </div>
 
@@ -307,9 +340,9 @@ export default function Contact() {
                   overflow: "hidden"
                 }}>
                   {/* Subtle noise/texture overlay optional, or decorative circle */}
-                  <div style={{ position: "absolute", top: "-50px", right: "-50px", width: "150px", height: "150px", borderRadius: "50%", background: "rgba(255,255,255,0.05)"}}></div>
+                  <div style={{ position: "absolute", top: "-50px",  right: "-50px", width: "150px", height: "150px", borderRadius: "50%", background: "rgba(255,255,255,0.05)"}}></div>
 
-                  <h2 style={{ fontFamily: "'Playfair Display', serif", margin: "0 0 30px 0", fontSize: "1.6rem" }}>Contact Information</h2>
+                  <h2 style={{ fontFamily: "'Playfair Display', serif", margin: "0 0 30px 0", fontSize: "1.6rem", color: "white" }}>Contact Information</h2>
                   
                   <div style={{ display: "flex", flexDirection: "column", gap: "25px" }}>
                     

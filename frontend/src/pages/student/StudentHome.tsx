@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { searchBooks, getBookDetails, createIssueRequest, getMonthlyRequestCount, getSubscriptionStatus, getRecommendations, joinWaitlist } from '../../api/libraryApi';
 import { AuthContext } from '../../context/AuthContext';
 import type { Book } from '../../types/dto';
+import Toast from '../../components/Toast';
 
 const StudentHome: React.FC = () => {
   const { auth } = useContext(AuthContext);
@@ -20,6 +21,7 @@ const StudentHome: React.FC = () => {
   } | null>(null);
   const [recommendations, setRecommendations] = useState<Book[]>([]);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const [availableGenres, setAvailableGenres] = useState<string[]>([]);
 
   // Toast notification state
   const [toastMessage, setToastMessage] = useState<{type: 'success' | 'error', message: string} | null>(null);
@@ -46,6 +48,22 @@ const StudentHome: React.FC = () => {
 
       // Display all books without pagination
       setBooks(response.data);
+
+      // Extract unique genres from all books
+      const genres: string[] = response.data
+        .map((book: Book) => book.genre)
+        .filter((genre): genre is string => genre != null && genre !== undefined && genre.trim() !== '')
+        .filter((genre, index, arr) => arr.indexOf(genre) === index) // Remove duplicates
+        .sort();
+
+      // Fallback genres if no genres found in data
+      const fallbackGenres = ['Fiction', 'Non-Fiction', 'Science', 'History', 'Biography', 'Romance', 'Mystery', 'Fantasy'];
+      const finalGenres = genres.length > 0 ? genres : fallbackGenres.slice(0, 5); // Use first 5 fallbacks
+
+      console.log('📚 Books data sample:', response.data.slice(0, 3).map(b => ({ title: b.title, genre: b.genre })));
+      console.log('📚 Extracted genres:', genres);
+      console.log('📚 Final genres for dropdown:', finalGenres);
+      setAvailableGenres(finalGenres);
     } catch (error) {
       console.error('❌ Error loading books:', error);
       showToast('error', 'Failed to load books');
@@ -471,23 +489,11 @@ const StudentHome: React.FC = () => {
     >
       {/* Toast Notification */}
       {toastMessage && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '20px',
-            right: '20px',
-            background: toastMessage.type === 'success' ? '#d4edda' : '#f8d7da',
-            color: toastMessage.type === 'success' ? '#155724' : '#721c24',
-            padding: '12px 20px',
-            borderRadius: '8px',
-            border: `1px solid ${toastMessage.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            zIndex: 1000,
-            fontWeight: '500'
-          }}
-        >
-          {toastMessage.message}
-        </div>
+        <Toast
+          message={toastMessage.message}
+          type={toastMessage.type}
+          onClose={() => setToastMessage(null)}
+        />
       )}
 
       {/* Header */}
@@ -955,11 +961,11 @@ const StudentHome: React.FC = () => {
             }}
           >
             <option value="">All Genres</option>
-            <option value="Fiction">Fiction</option>
-            <option value="Non-Fiction">Non-Fiction</option>
-            <option value="Science">Science</option>
-            <option value="History">History</option>
-            <option value="Biography">Biography</option>
+            {availableGenres.map((genre) => (
+              <option key={genre} value={genre}>
+                {genre}
+              </option>
+            ))}
           </select>
 
           {/* Availability Toggle */}
@@ -1017,352 +1023,242 @@ const StudentHome: React.FC = () => {
         </>
       )}
 
-      {/* Book Detail Modal */}
+      {/* Book Detail Modal - Redesigned */}
       {showBookModal && selectedBook && (
         <div style={{
           position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          background: 'linear-gradient(135deg, rgba(26, 26, 26, 0.85), rgba(26, 26, 26, 0.95))',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
           zIndex: 1000,
           padding: '20px',
-          backdropFilter: 'blur(8px)'
+          backdropFilter: 'blur(5px)'
         }}>
-          {/* Modal Toast Notification */}
-          {toastMessage && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '30px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                background: toastMessage.type === 'success' ? '#d4edda' : '#f8d7da',
-                color: toastMessage.type === 'success' ? '#155724' : '#721c24',
-                padding: '12px 24px',
-                borderRadius: '50px',
-                border: `2px solid ${toastMessage.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`,
-                boxShadow: '0 6px 20px rgba(0,0,0,0.3)',
-                zIndex: 1100,
-                fontSize: '0.95rem',
-                fontWeight: '600',
-                textShadow: '0 1px 1px rgba(0,0,0,0.1)'
-              }}
-            >
-              {toastMessage.message}
-            </div>
-          )}
-
           <div style={{
             background: 'linear-gradient(145deg, #ffffff 0%, #fefefe 100%)',
-            borderRadius: '24px',
-            maxWidth: '700px',
+            borderRadius: '20px',
+            maxWidth: '600px',
             width: '100%',
-            maxHeight: '90vh',
-            overflow: 'auto',
-            boxShadow: '0 25px 80px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.1)',
-            border: '1px solid rgba(139,69,19,0.2)',
+            maxHeight: '85vh',
+            overflow: 'hidden',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            border: '2px solid rgba(139,69,19,0.1)',
             position: 'relative'
           }}>
+            
 
-            {/* Close Button */}
-            <button
-              onClick={() => {
-                setShowBookModal(false);
-                setSelectedBook(null);
-                setToastMessage(null);
-              }}
-              style={{
-                position: 'absolute',
-                top: '16px',
-                right: '16px',
-                background: 'rgba(255,255,255,0.9)',
-                color: '#8B4513',
-                border: '2px solid rgba(255,255,255,0.8)',
-                borderRadius: '50%',
-                width: '48px',
-                height: '48px',
-                cursor: 'pointer',
-                fontSize: '1.8rem',
-                fontWeight: 'bold',
-                zIndex: 1001,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.3s ease',
-                backdropFilter: 'blur(10px)',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.2)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,1)';
-                e.currentTarget.style.borderColor = 'rgba(139,69,19,0.6)';
-                e.currentTarget.style.transform = 'scale(1.05)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.9)';
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.8)';
-                e.currentTarget.style.transform = 'scale(1)';
-              }}
-            >
-              ×
-            </button>
 
-            {/* Modal Content */}
+            {/* Modal Header */}
             <div style={{
+              background: 'linear-gradient(135deg, #8B4513 0%, #A0522D 100%)',
+              color: 'white',
+              /* Updated Padding: 
+                 30px top/bottom.
+                 60px left/right ensures text is centered and doesn't hit the close button.
+              */
+              padding: '30px 60px', 
+              textAlign: 'center',
               position: 'relative',
-              zIndex: 2,
-              padding: '40px'
+              overflow: 'hidden'
             }}>
-              {/* Book Header */}
+              {/* Decorative background */}
               <div style={{
-                textAlign: 'center',
-                marginBottom: '36px',
-                padding: '0 20px'
-              }}>
+                position: 'absolute',
+                top: '-50%',
+                right: '-20%',
+                width: '150px',
+                height: '150px',
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,0.1)',
+              }} />
+              <div style={{
+                position: 'absolute',
+                bottom: '-30%',
+                left: '-15%',
+                width: '120px',
+                height: '120px',
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,0.08)',
+              }} />
+
+              <div style={{ position: 'relative', zIndex: 2 }}>
                 <h1 style={{
-                  color: '#2A1F16',
-                  fontSize: '2.0rem',
+                  fontSize: '1.8rem',
                   fontWeight: '700',
-                  margin: '0 0 12px 0',
-                  lineHeight: '1.2',
-                  textShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                  margin: '0 0 8px 0',
+                  textShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                  lineHeight: '1.2' // Added line height for multi-line titles
                 }}>
                   {selectedBook.title}
                 </h1>
-                <div style={{
-                  color: '#666',
+                <p style={{
                   fontSize: '1.1rem',
-                  fontStyle: 'italic',
-                  fontWeight: '500',
-                  marginBottom: '16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px'
+                  margin: '0',
+                  opacity: 0.9,
+                  fontWeight: '300'
                 }}>
-                  <span>✍️</span>
-                  <span>{selectedBook.author}</span>
-                </div>
-                {selectedBook.publisher && (
+                  by {selectedBook.author}
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '25px', overflowY: 'auto', maxHeight: 'calc(85vh - 150px)' }}> 
+            {/* Added overflow auto here just in case content gets too long */}
+            
+              {/* Book Stats */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '15px',
+                marginBottom: '25px'
+              }}>
+                <div style={{
+                  background: 'linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%)',
+                  borderRadius: '12px',
+                  padding: '15px',
+                  textAlign: 'center',
+                  border: '1px solid #e9ecef'
+                }}>
                   <div style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    color: '#8B4513',
-                    fontSize: '1rem',
-                    background: 'rgba(139,69,19,0.1)',
-                    padding: '8px 16px',
-                    borderRadius: '25px',
-                    border: '1px solid rgba(139,69,19,0.2)',
+                    fontSize: '2rem',
+                    marginBottom: '5px'
+                  }}>
+                    {(selectedBook.availableCopies || 0) > 0 ? '🟢' : '🔴'}
+                  </div>
+                  <div style={{
+                    fontSize: '1.2rem',
+                    fontWeight: '700',
+                    color: (selectedBook.availableCopies || 0) > 0 ? '#28a745' : '#dc3545'
+                  }}>
+                    {selectedBook.availableCopies}
+                  </div>
+                  <div style={{
+                    fontSize: '0.8rem',
+                    color: '#6c757d',
                     fontWeight: '500'
                   }}>
-                    <span>🏢</span>
-                    <span>{selectedBook.publisher}</span>
-                    {selectedBook.publishedYear && <span>• {selectedBook.publishedYear}</span>}
+                    Available
                   </div>
-                )}
+                </div>
+
+                <div style={{
+                  background: 'linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%)',
+                  borderRadius: '12px',
+                  padding: '15px',
+                  textAlign: 'center',
+                  border: '1px solid #e9ecef'
+                }}>
+                  <div style={{
+                    fontSize: '2rem',
+                    marginBottom: '5px'
+                  }}>
+                    📚
+                  </div>
+                  <div style={{
+                    fontSize: '1.2rem',
+                    fontWeight: '700',
+                    color: '#2A1F16'
+                  }}>
+                    {selectedBook.totalCopies}
+                  </div>
+                  <div style={{
+                    fontSize: '0.8rem',
+                    color: '#6c757d',
+                    fontWeight: '500'
+                  }}>
+                    Total Copies
+                  </div>
+                </div>
               </div>
 
-              {/* Statistics Section - Single Line */}
-              <div style={{ marginBottom: '36px' }}>
+              {/* Book Details */}
+              <div style={{ marginBottom: '25px' }}>
                 <h3 style={{
                   color: '#2A1F16',
-                  fontSize: '1.3rem',
+                  fontSize: '1.1rem',
                   fontWeight: '600',
-                  marginBottom: '20px',
-                  paddingBottom: '8px',
-                  borderBottom: '2px solid #8B4513'
+                  margin: '0 0 15px 0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
                 }}>
-                  📊 Statistics
+                  📖 Book Information
                 </h3>
 
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: '1fr 1fr',
-                  gap: '20px'
+                  gap: '15px'
                 }}>
-                  {/* Availability Status */}
-                  <div style={{
-                    background: 'linear-gradient(145deg, #f8f9fa 0%, #ffffff 100%)',
-                    borderRadius: '12px',
-                    padding: '20px',
-                    border: '2px solid #e9ecef',
-                    boxShadow: '0 3px 15px rgba(0,0,0,0.05)'
-                  }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px'
-                    }}>
-                      <span style={{
-                        fontSize: '2rem',
-                        color: (selectedBook.availableCopies || 0) > 0 ? '#2e7d32' : '#c62828'
-                      }}>
-                        {(selectedBook.availableCopies || 0) > 0 ? '🟢' : '🔴'}
-                      </span>
-                      <div>
-                        <div style={{
-                          fontSize: '1.4rem',
-                          fontWeight: '700',
-                          color: (selectedBook.availableCopies || 0) > 0 ? '#2e7d32' : '#c62828'
-                        }}>
-                          {selectedBook.availableCopies}
-                        </div>
-                        <div style={{
-                          fontSize: '0.9rem',
-                          color: '#666',
-                          fontWeight: '500'
-                        }}>
-                          Available Copies
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Total Copies */}
-                  <div style={{
-                    background: 'linear-gradient(145deg, #f8f9fa 0%, #ffffff 100%)',
-                    borderRadius: '12px',
-                    padding: '20px',
-                    border: '2px solid #e9ecef',
-                    boxShadow: '0 3px 15px rgba(0,0,0,0.05)'
-                  }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px'
-                    }}>
-                      <span style={{ fontSize: '2rem' }}>📚</span>
-                      <div>
-                        <div style={{
-                          fontSize: '1.4rem',
-                          fontWeight: '700',
-                          color: '#2A1F16'
-                        }}>
-                          {selectedBook.totalCopies}
-                        </div>
-                        <div style={{
-                          fontSize: '0.9rem',
-                          color: '#666',
-                          fontWeight: '500'
-                        }}>
-                          Total Copies
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Book Details Section */}
-              <div style={{ marginBottom: '36px' }}>
-                <h3 style={{
-                  color: '#2A1F16',
-                  fontSize: '1.3rem',
-                  fontWeight: '600',
-                  marginBottom: '20px',
-                  paddingBottom: '8px',
-                  borderBottom: '2px solid #8B4513'
-                }}>
-                  📖 Book Details
-                </h3>
-
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                  gap: '20px'
-                }}>
-                  {/* Category */}
                   {selectedBook.genre && (
-                    <div>
-                      <label style={{
-                        display: 'block',
-                        fontSize: '0.95rem',
+                    <div style={{
+                      background: '#fff3e0',
+                      padding: '10px 15px',
+                      borderRadius: '8px',
+                      border: '1px solid #ffcc02'
+                    }}>
+                      <div style={{
+                        fontSize: '0.8rem',
+                        color: '#f57c00',
                         fontWeight: '600',
-                        color: '#666',
-                        marginBottom: '8px'
+                        marginBottom: '3px'
                       }}>
-                        Category
-                      </label>
-                      <span style={{
-                        background: 'linear-gradient(135deg, #8B4513 0%, #D2691E 100%)',
-                        color: '#FFF8DC',
-                        padding: '10px 16px',
-                        borderRadius: '20px',
+                        CATEGORY
+                      </div>
+                      <div style={{
                         fontSize: '0.9rem',
-                        fontWeight: '600',
-                        display: 'inline-block'
+                        color: '#2A1F16',
+                        fontWeight: '500'
                       }}>
                         {selectedBook.genre}
-                      </span>
+                      </div>
                     </div>
                   )}
 
-                  {/* ISBN */}
-                  {selectedBook.isbn && (
-                    <div>
-                      <label style={{
-                        display: 'block',
-                        fontSize: '0.95rem',
-                        fontWeight: '600',
-                        color: '#666',
-                        marginBottom: '8px'
-                      }}>
-                        ISBN
-                      </label>
+                  {selectedBook.publisher && (
+                    <div style={{
+                      background: '#f3e5f5',
+                      padding: '10px 15px',
+                      borderRadius: '8px',
+                      border: '1px solid #ba68c8'
+                    }}>
                       <div style={{
-                        background: 'rgba(139,69,19,0.05)',
-                        border: '1px solid rgba(139,69,19,0.1)',
-                        padding: '12px 16px',
-                        borderRadius: '10px',
-                        fontSize: '1rem',
-                        color: '#2A1F16',
-                        fontWeight: '500',
-                        fontFamily: 'monospace'
+                        fontSize: '0.8rem',
+                        color: '#7b1fa2',
+                        fontWeight: '600',
+                        marginBottom: '3px'
                       }}>
-                        {selectedBook.isbn}
+                        PUBLISHER
+                      </div>
+                      <div style={{
+                        fontSize: '0.9rem',
+                        color: '#2A1F16',
+                        fontWeight: '500'
+                      }}>
+                        {selectedBook.publisher}
                       </div>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Description Section */}
-              {selectedBook.description && (
-                <div style={{ marginBottom: '36px' }}>
-                  <h3 style={{
-                    color: '#2A1F16',
-                    fontSize: '1.3rem',
-                    fontWeight: '600',
-                    marginBottom: '16px',
-                    paddingBottom: '8px',
-                    borderBottom: '2px solid #8B4513'
-                  }}>
-                    📝 Description
-                  </h3>
-                  <div style={{
-                    background: 'linear-gradient(145deg, #f8f9fa 0%, #ffffff 100%)',
-                    padding: '24px',
-                    borderRadius: '12px',
-                    border: '2px solid #e9ecef',
-                    color: '#444',
-                    lineHeight: '1.7',
-                    fontSize: '1rem',
-                    boxShadow: '0 3px 15px rgba(0,0,0,0.05)'
-                  }}>
-                    {selectedBook.description}
-                  </div>
-                </div>
-              )}
+              {/* Access Level Badge */}
+              <div style={{ marginBottom: '25px' }}>
+                {getAccessLevelBadge(selectedBook)}
+              </div>
 
               {/* Action Section */}
               <div style={{
                 display: 'flex',
-                gap: '16px',
+                gap: '15px',
                 justifyContent: 'center',
-                alignItems: 'center',
-                flexDirection: 'column'
+                alignItems: 'center'
               }}>
                 {(selectedBook.availableCopies || 0) > 0 ? (
                   <>
@@ -1373,37 +1269,49 @@ const StudentHome: React.FC = () => {
                         background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
                         color: 'white',
                         border: 'none',
-                        borderRadius: '50px',
-                        padding: '18px 36px',
-                        fontSize: '1.2rem',
+                        borderRadius: '12px',
+                        padding: '15px 25px',
+                        fontSize: '1.1rem',
                         fontWeight: '600',
                         cursor: requestingBookId === selectedBook.id ? 'not-allowed' : 'pointer',
-                        boxShadow: '0 6px 20px rgba(40,167,69,0.4)',
+                        boxShadow: '0 4px 15px rgba(40,167,69,0.3)',
                         opacity: requestingBookId === selectedBook.id ? 0.6 : 1,
                         transition: 'all 0.3s ease',
-                        minWidth: '240px'
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '10px',
+                        flex: 2
                       }}
                       onMouseEnter={(e) => {
                         if (requestingBookId !== selectedBook.id) {
                           e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = '0 8px 25px rgba(40,167,69,0.5)';
+                          e.currentTarget.style.boxShadow = '0 6px 20px rgba(40,167,69,0.4)';
                         }
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(40,167,69,0.4)';
+                        e.currentTarget.style.boxShadow = '0 4px 15px rgba(40,167,69,0.3)';
                       }}
                     >
-                      {requestingBookId === selectedBook.id ? '⏳ Processing Request...' : '📖 Request This Book'}
+                      {requestingBookId === selectedBook.id ? (
+                        <>
+                          <div style={{
+                            width: '20px',
+                            height: '20px',
+                            border: '2px solid rgba(255,255,255,0.3)',
+                            borderTop: '2px solid white',
+                            borderRadius: '50%',
+                            animation: 'spin 1s linear infinite'
+                          }} />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          📖 Request This Book
+                        </>
+                      )}
                     </button>
-                    <div style={{
-                      color: '#666',
-                      fontSize: '0.9rem',
-                      textAlign: 'center',
-                      maxWidth: '400px'
-                    }}>
-                      Available now! Your request will be processed by the library staff.
-                    </div>
                   </>
                 ) : (
                   <>
@@ -1411,51 +1319,128 @@ const StudentHome: React.FC = () => {
                       onClick={() => handleRequestBook(selectedBook.id)}
                       disabled={requestingBookId === selectedBook.id}
                       style={{
-                        background: 'linear-gradient(135deg, #E8D1A7 0%, #F4E4BC 100%)',
-                        color: '#2A1F16',
-                        border: '3px solid #8B4513',
-                        borderRadius: '50px',
-                        padding: '18px 36px',
-                        fontSize: '1.2rem',
+                        background: 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '12px',
+                        padding: '15px 25px',
+                        fontSize: '1.1rem',
                         fontWeight: '600',
                         cursor: requestingBookId === selectedBook.id ? 'not-allowed' : 'pointer',
-                        boxShadow: '0 6px 20px rgba(139,69,19,0.3)',
+                        boxShadow: '0 4px 15px rgba(255,152,0,0.3)',
                         opacity: requestingBookId === selectedBook.id ? 0.6 : 1,
                         transition: 'all 0.3s ease',
-                        minWidth: '240px'
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '10px',
+                        flex: 2
                       }}
                       onMouseEnter={(e) => {
                         if (requestingBookId !== selectedBook.id) {
                           e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = '0 8px 25px rgba(139,69,19,0.4)';
+                          e.currentTarget.style.boxShadow = '0 6px 20px rgba(255,152,0,0.4)';
                         }
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(139,69,19,0.3)';
+                        e.currentTarget.style.boxShadow = '0 4px 15px rgba(255,152,0,0.3)';
                       }}
                     >
-                      {requestingBookId === selectedBook.id ? '⏳ Joining Waitlist...' : '📋 Join Waitlist'}
+                      {requestingBookId === selectedBook.id ? (
+                        <>
+                          <div style={{
+                            width: '20px',
+                            height: '20px',
+                            border: '2px solid rgba(255,255,255,0.3)',
+                            borderTop: '2px solid white',
+                            borderRadius: '50%',
+                            animation: 'spin 1s linear infinite'
+                          }} />
+                          Joining Waitlist...
+                        </>
+                      ) : (
+                        <>
+                          📋 Join Waitlist
+                        </>
+                      )}
                     </button>
-                    <div style={{
-                      color: '#c62828',
-                      fontSize: '0.95rem',
-                      textAlign: 'center',
-                      maxWidth: '400px',
-                      background: '#fff3f3',
-                      padding: '12px 16px',
-                      borderRadius: '12px',
-                      border: '1px solid #ffcdd2'
-                    }}>
-                      🚫 Currently unavailable. Joining the waitlist will notify you when it's returned.
-                    </div>
                   </>
                 )}
+                <button
+                  onClick={() => {
+                    setShowBookModal(false);
+                    setSelectedBook(null);
+                    setToastMessage(null);
+                  }}
+                  style={{
+                    padding: '14px 30px',
+                    background: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    boxShadow: '0 4px 12px rgba(108, 117, 125, 0.3)',
+                    flex: 1,
+                    maxWidth: '150px'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#5a6268';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(108, 117, 125, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#6c757d';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(108, 117, 125, 0.3)';
+                  }}
+                >
+                  Cancel
+                </button>
               </div>
+
+              {(selectedBook.availableCopies || 0) > 0 ? (
+                <div style={{
+                  color: '#28a745',
+                  fontSize: '0.9rem',
+                  textAlign: 'center',
+                  fontWeight: '500',
+                  marginTop: '15px'
+                }}>
+                  ✅ Available now! Your request will be processed immediately.
+                </div>
+              ) : (
+                <div style={{
+                  color: '#f57c00',
+                  fontSize: '0.9rem',
+                  textAlign: 'center',
+                  fontWeight: '500',
+                  background: '#fff8e1',
+                  padding: '10px 15px',
+                  borderRadius: '8px',
+                  border: '1px solid #ffcc02',
+                  marginTop: '15px'
+                }}>
+                  🚫 Currently unavailable. You'll be notified when it becomes available!
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
+
+      {/* Add spin animation */}
+      <style>
+        {`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}
+      </style>
     </div>
   );
 };

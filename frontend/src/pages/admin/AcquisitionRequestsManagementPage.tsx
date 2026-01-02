@@ -343,7 +343,7 @@ const AcquisitionRequestsManagementPage: React.FC = () => {
           {/* Status Filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
             <span style={{ fontSize: '0.95rem', fontWeight: '600', color: '#2A1F16' }}>
-              Status Filter:
+              Status 
             </span>
             <select
               value={statusFilter}
@@ -690,7 +690,7 @@ const AcquisitionRequestsManagementPage: React.FC = () => {
       )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {totalPages > 0 && (
         <div style={{
           display: "flex",
           justifyContent: "space-between",

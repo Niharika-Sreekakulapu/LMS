@@ -415,3 +415,39 @@ a[href^="#"] {
     filter: hue-rotate(360deg);
   }
 }
+
+/* Toast component - ensure it always appears on top */
+.toast-overlay {
+  position: fixed !important;
+  top: 20px !important;
+  right: 20px !important;
+  z-index: 2147483647 !important;
+  pointer-events: auto !important;
+  transform: translateZ(0) !important;
+  will-change: transform !important;
+}
+
+/* Ensure toast appears above ALL content, including modals and overlays */
+.toast-overlay {
+  box-shadow: 0 25px 80px rgba(0,0,0,0.4) !important;
+}
+
+/* Nuclear option: force toast above everything */
+.toast-overlay,
+div.toast-overlay,
+span.toast-overlay,
+* .toast-overlay {
+  z-index: 2147483647 !important;
+  position: fixed !important;
+}
+
+/* Override any modal or overlay z-index */
+.modal, .overlay, .popup, .dialog,
+[class*="modal"], [class*="overlay"], [class*="popup"], [class*="dialog"] {
+  z-index: auto !important;
+}
+
+/* Force toast to be above all modals */
+.toast-overlay {
+  z-index: 2147483648 !important; /* One higher than max */
+}

@@ -90,7 +90,7 @@ public class ReportService {
         for (BorrowRecord borrow : overdueBorrows) {
             User student = borrow.getStudent();
             Book book = borrow.getBook();
-            long daysOverdue = borrow.daysOverdue();
+            long daysOverdue = java.time.Duration.between(borrow.getDueDate(), Instant.now()).toDays();
 
             writer.println(
                 student.getId() + "," +

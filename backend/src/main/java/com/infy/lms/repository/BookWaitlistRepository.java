@@ -37,4 +37,10 @@ public interface BookWaitlistRepository extends JpaRepository<BookWaitlist, Long
     // Find waitlist entries that need priority recalculation (older than specified time)
     @Query("SELECT w FROM BookWaitlist w WHERE w.isActive = true AND w.lastUpdated < :cutoffTime")
     List<BookWaitlist> findStaleWaitlistEntries(@Param("cutoffTime") java.time.Instant cutoffTime);
+
+    // Find all entries for a student-book combination (both active and inactive)
+    List<BookWaitlist> findByStudentAndBook(User student, Book book);
+
+    // Find all active waitlist entries across all books
+    List<BookWaitlist> findByIsActiveTrue();
 }

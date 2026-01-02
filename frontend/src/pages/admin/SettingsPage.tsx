@@ -177,17 +177,7 @@ export default function SettingsPage() {
                       Current: {settings.finePerDay}% of book's MRP charged per day overdue
                     </div>
                   </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 14, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
-                      Grace Period (Days)
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="3"
-                      min="0"
-                      style={{ width: "100%", padding: "10px 12px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 14 }}
-                    />
-                  </div>
+
                 </div>
               </div>
 
